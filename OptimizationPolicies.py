@@ -4,6 +4,7 @@ import cvxpy
 import matplotlib.patches as patches
 import matplotlib.pyplot as pyplot
 import numpy as np
+from scipy.stats import multivariate_normal
 
 import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
@@ -57,8 +58,8 @@ if __name__ == "__main__":
     ax.plot(agents[1]['position'][0], agents[1]['position'][1], Marker='.', MarkerSize=10, color='blue')
 
     # get image and plot
-    r = -2*agents[1]['position'][0] + grid_size - 1
-    c = 2*agents[1]['position'][1]
+    r = -2*agents[1]['position'][1] + grid_size - 1
+    c = 2*agents[1]['position'][0]
 
     image = sim.state[r-3:r+3, c-3:c+3]
     ax = plot_forest(image, 6)
@@ -74,35 +75,40 @@ if __name__ == "__main__":
         y = 6 / 2 - 0.5 * (r + 1) + 0.75
 
         means[idx, :] = [x, y]
-        covs[:, :, idx] = 1*np.eye(2, 2)
+        covs[:, :, idx] = 0.1*np.eye(2, 2)
 
     for idx, (r, c) in enumerate(zip(r_burn, c_burn)):
         x = c * 0.5 + 0.75
         y = 6/2 - 0.5 * (r + 1) + 0.75
 
         means[len(r_fire)+idx, :] = [x, y]
-        covs[:, :, len(r_fire)+idx] = 1*np.eye(2, 2)
+        covs[:, :, len(r_fire)+idx] = 0.1*np.eye(2, 2)
 
     x = np.linspace(0, 4, num=100, endpoint=True)
     y = np.linspace(0, 4, num=100, endpoint=True)
     X, Y = np.meshgrid(x, y)
     Z = np.zeros_like(X)
+    pos = np.dstack((X, Y))
 
-    for r in range(X.shape[0]):
-        for c in range(X.shape[1]):
+    # Z = np.zeros_like(X)
+    # for r in range(X.shape[0]):
+    #     for c in range(X.shape[1]):
+    #
+    #         point = np.array([X[r, c], Y[r, c]])
+    #         for idx in range(len(r_fire)):
+    #
+    #             vector = point - means[idx, :]
+    #             result = -0.5*np.matmul(np.matmul(vector.transpose(), np.linalg.inv(covs[:, :, idx])), vector)
+    #             result += np.log(1/np.sqrt((2*np.pi)**2*np.linalg.det(covs[:, :, i])))
+    #             Z[r, c] += np.exp(result)
 
-            point = np.array([X[r, c], Y[r, c]])
-            for idx in range(len(r_fire)+len(r_burn)):
-
-                vector = point - means[idx, :]
-                Z[r, c] += -0.5*np.matmul(np.matmul(vector.transpose(), np.linalg.inv(covs[:, :, idx])), vector)
-                #Z[r, c] += np.log(1/np.sqrt(2*np.pi*np.linalg.det(covs[:, :, i])))
-
-            # Z[r, c] = np.exp(Z[r, c] + 25)
+    for i in range(len(r_fire)):
+        Z += multivariate_normal.pdf(pos, mean=means[i, :], cov=covs[:, :, i])
+    # Z = multivariate_normal.pdf(pos, mean=means, cov=covs)
 
     fig = pyplot.figure()
-    ax = fig.add_subplot(111, aspect='equal')
-    ax.pcolor(X, Y, Z)
+    ax = fig.add_subplot(111, aspect='equal', projection='3d')
+    ax.plot_surface(X, Y, Z)
 
     pyplot.show()
 
