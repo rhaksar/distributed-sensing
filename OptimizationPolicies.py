@@ -27,41 +27,46 @@ def PlotForest(state):
     for r in range(state.shape[0]):
         for c in range(state.shape[1]):
             x = col_to_x(c)
-            y = row_to_y(state.shape[1], r)
+            y = row_to_y(state.shape[0], r)
 
             rec = patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6)
             if state[r, c] == 0:
-                rec.set_color('g')
+                rec.set_color('green')
             elif state[r, c] == 1:
-                rec.set_color('r')
+                rec.set_color('red')
             elif state[r, c] == 2:
-                rec.set_color('k')
+                rec.set_color('black')
+            else:
+                rec.set_color('gray')
 
             ax.add_patch(rec)
 
     return ax
 
-def PlotForestImage(image, position):
+
+def PlotForestImage(image, lower_left_corner):
     fig = pyplot.figure()
     ax = fig.add_subplot(111, aspect='equal')
 
-    cx, cy = col_to_x(image.shape[1]-1)/2 + 0.25, row_to_y(image.shape[0], 0)/2 + 0.25
+    # cx, cy = col_to_x(image.shape[1]-1)/2 + 0.25, row_to_y(image.shape[0], 0)/2 + 0.25
 
     for r in range(image.shape[0]):
         for c in range(image.shape[1]):
             x = col_to_x(c)
-            y = row_to_y(image.shape[1], r)
+            y = row_to_y(image.shape[0], r)
 
-            x += position[0] - cx
-            y += position[1] - cy
+            x += lower_left_corner[0] # x += position[0] - cx
+            y += lower_left_corner[1] # y += position[1] - cy
 
             rec = patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6)
             if image[r, c] == 0:
-                rec.set_color('g')
+                rec.set_color('green')
             elif image[r, c] == 1:
-                rec.set_color('r')
+                rec.set_color('red')
             elif image[r, c] == 2:
-                rec.set_color('k')
+                rec.set_color('black')
+            else:
+                rec.set_color('gray')
 
             ax.add_patch(rec)
 
@@ -72,85 +77,142 @@ def col_to_x(col):
     return 0.5*col
 
 
-def row_to_y(grid_size, row):
-    return 0.5*(grid_size-row-1)
+def row_to_y(y_limit, row):
+    return 0.5*(y_limit-row-1)
 
 
-def rc_to_xy(grid_size, rc):
-    return col_to_x(rc[1]), row_to_y(grid_size, rc[0])
+def rc_to_xy(y_limit, rc):
+    return col_to_x(rc[1]), row_to_y(y_limit, rc[0])
 
 
 def x_to_col(x):
-    return np.around(2*x, decimals=1).astype(np.int8)
+    return np.rint(2*x).astype(np.int8)
 
 
-def y_to_row(grid_size, y):
-    return np.around(grid_size-1-2*y, decimals=1).astype(np.int8)
+def y_to_row(y_limit, y):
+    return np.rint(y_limit-1-2*y).astype(np.int8)
 
 
-def xy_to_rc(grid_size, xy):
-    return y_to_row(grid_size, xy[1]), x_to_col(xy[0])
+def xy_to_rc(y_limit, xy):
+    return y_to_row(y_limit, xy[1]), x_to_col(xy[0])
 
 
 '''
 Create a slice of the forest state, padded with zeros if out of bounds
 Image is centered at "position"
 '''
-def CreateImage(state, position, dim):
-    image = np.zeros(dim)
+def CreateSoloImage(state, position, dim):
+    r0, c0 = xy_to_rc(state.shape[0], position)
+    image = np.zeros(dim).astype(np.int8)
 
     half_row = (dim[0]-1)//2
     half_col = (dim[1]-1)//2
 
-    for ri,dr in enumerate(np.arange(-half_row,half_row+1,1)):
-        for ci,dc in enumerate(np.arange(-half_col,half_col+1,1)):
-            r = position[0] + dr
-            c = position[1] + dc
+    for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
+        for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
+            r = r0 + dr
+            c = c0 + dc
 
-            if 0 <= r < grid_size and 0 <= c < grid_size:
-                image[ri,ci] = state[r,c]
+            if 0 <= r < state.shape[0] and 0 <= c < state.shape[1]:
+                image[ri, ci] = state[r, c]
 
-    return image
+    return image, rc_to_xy(state.shape[0], (r0+half_row, c0-half_row))
+
+
+def CreateMultiImage(state, positions, dim):
+    rows = []
+    cols = []
+    rowcol = []
+    for idx, pos in enumerate(positions):
+        r, c = xy_to_rc(state.shape[0], pos)
+        rowcol.append((r, c))
+        rows.append(r-(dim[0]-1)//2)
+        rows.append(r+(dim[0]-1)//2)
+        cols.append(c-(dim[1]-1)//2)
+        cols.append(c+(dim[1]-1)//2)
+
+    min_r, max_r = np.amin(rows), np.amax(rows)
+    min_c, max_c = np.amin(cols), np.amax(cols)
+    min_x, min_y = rc_to_xy(state.shape[0], (max_r, min_c))
+
+    image = -1*np.ones((max_r-min_r+1, max_c-min_c+1)).astype(np.int8)
+
+    half_row = (dim[0]-1)//2
+    half_col = (dim[1]-1)//2
+    for r0, c0 in rowcol:
+        for dr in np.arange(-half_row, half_row+1, 1):
+            for dc in np.arange(-half_col, half_col+1, 1):
+                ri = r0 - min_r + dr
+                ci = c0 - min_c + dc
+
+                r = r0 + dr
+                c = c0 + dc
+
+                if 0 <= r < state.shape[0] and 0 <= c < state.shape[1]:
+                    image[ri, ci] = state[r, c]
+                else:
+                    image[ri, ci] = 0
+
+    return image, (min_x, min_y)
 
 
 '''
-Given an image, create an ordered lists of tasks (locations) and their weights
+Given an image, create an ordered lists of tasks (locations) with weights
 '''
-def CreateTasks(image, location, memory):
+def CreateSoloTasks(image, lower_left_corner, location, memory, center):
     cx, cy = col_to_x(image.shape[1]-1)/2 + 0.25, row_to_y(image.shape[0], 0)/2 + 0.25
     tasks = []
     neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
     expand_image = np.pad(image, ((1, 1), (1, 1)), 'constant', constant_values=((-1, -1), (-1, -1)))
 
+    # if fires: tasks are (boundary) fires
+    # if no fires and some/all burnt: tasks are (boundry) burnt trees
+    # if no fires and no burnt: task is "go to center"
     fire = np.where(expand_image == 1)
+    burnt = np.where(expand_image == 2)
     if len(fire[0]) >= 1:
-        for _, (r, c) in enumerate(zip(fire[0], fire[1])):
-            x, y = col_to_x(c-1) + 0.25, row_to_y(image.shape[0], r-1) + 0.25
-            x += location[0] - cx
-            y += location[1] - cy
+        r_task, c_task = fire[0], fire[1]
+    elif len(burnt[0] >= 1):
+        r_task, c_task = burnt[0], fire[1]
+    else:
+        r_task, c_task = None, None
+
+    if r_task is not None:
+        for _, (r, c) in enumerate(zip(r_task, c_task)):
+            # "c-1" and "r-1" are due to padding
+            # "+ 0.25" is due to cell width/height
+            x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
+            x += lower_left_corner[0] # location[0] - cx
+            y += lower_left_corner[1] # location[1] - cy
 
             weight = 0
             for (dr, dc) in neighbors:
-                if expand_image[r + dr, c + dc] == 0:
+                if expand_image[r+dr, c+dc] == 0:
                     weight += 1
-                elif expand_image[r + dr, c + dc] == -1:
-                    weight += 0.2
+                elif expand_image[r+dr, c+dc] == -1:
+                    weight += 0.5
 
             task = np.around(np.array([x, y]), decimals=2)
             if weight > 0 and not any(np.array_equal(task, m) for m in memory):
                 tasks.append([task, weight])
 
+    # all healthy: task is "go to center"
+    if not tasks:
+        if int(np.sum(image)) == 0:
+            center_vector = 1*(center-location) / np.linalg.norm(center-location, ord=2)
+            tasks.append([location+center_vector, 1])
+
     tasks_ordered = []
     for i in range(len(tasks)):
         if i == 0:
-            # p = np.array([cx, cy])
+            # p = np.array([cx, cy]) + np.array([lower_left_corner])
             p = location
         else:
             p = tasks_ordered[-1][0]
 
         # tasks.sort(key=lambda s: (np.linalg.norm(s[0]-p, ord=2), -s[1]))
-        tasks.sort(key=lambda s: (s[1]/len(neighbors))-np.maximum(np.linalg.norm(s[0]-p, ord=2), 1), reverse=True)
+        tasks.sort(key=lambda s: s[1]-np.maximum(np.linalg.norm(s[0]-p, ord=2), 1), reverse=True)
         tasks_ordered.append(tasks[0])
         tasks = tasks[1:]
 
@@ -160,7 +222,7 @@ def CreateTasks(image, location, memory):
     return tasks_ordered
 
 
-def CreatePlan(tasks, initial_position):
+def CreateSoloPlan(tasks, initial_position):
     d = 0
     x0 = initial_position
 
@@ -180,9 +242,8 @@ def CreatePlan(tasks, initial_position):
             constraints = [x[:, t+1] == x[:, t] + u[:, t], cvxpy.norm(u[:, t], p=2) <= 0.5]
             states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
 
-        cost = 0
         constraints = [x[:, 0] == x0, cvxpy.maximum(cvxpy.norm(x[:, T]-task, p=2)-d, 0) <= 0]
-        states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
+        states.append(cvxpy.Problem(cvxpy.Minimize(0), constraints))
 
         problem = cvxpy.sum(states)
         problem.solve()
@@ -198,51 +259,63 @@ if __name__ == "__main__":
 
     np.random.seed(42)
 
-    agents = {1: {}}
-    agents[1]['position'] = np.array([9.75, 9.75])
-    agents[1]['memory'] = []
+    agents = {'position': np.zeros((3, 2)), 'memory': [[], [], []]}
+    agents['position'][0, :] = np.array([10.25, 8.25]) + np.array([-3, 0]) # np.array([0.25, 0.25])
+    agents['position'][1, :] = np.array([10.75, 9.25]) # np.array([24.75, 24.75])
+    agents['position'][2, :] = np.array([10.25, 11.25])
 
     grid_size = 50
     sim = FireSimulator(grid_size)
 
-    for i in range(15):
+    for i in range(25):
         sim.step([])
 
     # plot forest and agent position
     # ax = PlotForest(sim.state)
-    # ax.plot(agents[1]['position'][0], agents[1]['position'][1], Marker='.', MarkerSize=10, color='blue')
+    # ax.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=10, color='blue')
 
-    for iteration in range(30):
-        print('iteration: %d' %iteration)
-        # if iteration > 20:
-        #     ax = PlotForest(sim.state)
+    # single agent example
+    # agents['position'][0, :] = np.array([9.25, 9.25])
+    for iteration in range(17):
+        print('iteration: %d' %(iteration+1))
+        # ax = PlotForest(sim.state)
 
         # get agent image and plot
         # r = int(-2*(agents[1]['position'][1]-0.25) + grid_size - 1)
         # c = int(2*(agents[1]['position'][0]-0.25))
-        r, c = xy_to_rc(grid_size, agents[1]['position']-0.25)
-        image = CreateImage(sim.state, (r, c), (5, 5))
-        ax = PlotForestImage(image, agents[1]['position'])
-        ax.plot(agents[1]['position'][0], agents[1]['position'][1], Marker='.', MarkerSize=10, color='blue')
+        # r, c = xy_to_rc(grid_size, agents[1]['position']-0.25)
+        image, corner = CreateSoloImage(sim.state, agents['position'][0, :]-0.25, (5, 5))
+        ax = PlotForestImage(image, corner)
+        ax.plot(agents['position'][0, 0], agents['position'][0, 1], Marker='.', MarkerSize=10, color='blue')
 
         # get tasks from image, accounting for memory
-        tasks = CreateTasks(image, agents[1]['position'], agents[1]['memory'])
+        tasks = CreateSoloTasks(image, corner, agents['position'][0, :], agents['memory'][0], np.array([12.5, 12.5]))
 
         # solve convex program to generate path
-        actions, path = CreatePlan(tasks, agents[1]['position'])
-        agents[1]['position'] = path[0][:, -1]
+        actions, path = CreateSoloPlan(tasks, agents['position'][0, :])
+        agents['position'][0, :] = path[0][:, -1]
 
-        # if iteration > 20:
         ax.plot(path[0][0, :], path[0][1, :], Marker='.', MarkerSize=10, color='white')
+        ax.plot(path[0][0, 0], path[0][1, 0], Marker='.', MarkerSize=15, color='blue')
 
         # add task to memory
-        agents[1]['memory'].append(np.around(path[0][:, -1], decimals=2))
+        agents['memory'][0].append(np.around(path[0][:, -1], decimals=2))
 
         # retain tasks still in view
-        agents[1]['memory'] = [m for m in agents[1]['memory']
-                               if -5/4 <= m[0]-agents[1]['position'][0] <= 5/4 and
-                                  -5/4 <= m[1]-agents[1]['position'][1] <= 5/4]
+        agents['memory'][0] = [m for m in agents['memory'][0]
+                               if -5/4 <= m[0]-agents['position'][0, 0] <= 5/4 and
+                                  -5/4 <= m[1]-agents['position'][0, 1] <= 5/4]
 
-        # print(agents[1]['memory'])
+        # print(agents['memory'][0])
 
         pyplot.show()
+
+    # multi-agent example
+    # image, corner = CreateMultiImage(sim.state, agents['position']-0.25, (5, 5))
+    # ax = PlotForestImage(image, corner)
+    # ax.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=10, color='blue')
+
+
+
+
+    pyplot.show()
