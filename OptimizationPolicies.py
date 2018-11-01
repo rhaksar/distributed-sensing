@@ -419,7 +419,7 @@ if __name__ == "__main__":
     # multi-agent example
     cooperating_agents = np.array([0, 1, 2])
 
-    for iteration in range(10):
+    for iteration in range(15):
         print('iteration: %d' % (iteration + 1))
 
         # get joint image and plot
@@ -444,7 +444,7 @@ if __name__ == "__main__":
 
         # retain tasks still in view
         for a in range(len(agents['memory'])):
-            agents['memory'][0] = [m for m in agents['memory'][a]
+            agents['memory'][a] = [m for m in agents['memory'][a]
                                    if -5/4 <= m[0]-agents['position'][a, 0] <= 5/4 and
                                       -5/4 <= m[1]-agents['position'][a, 1] <= 5/4]
 
