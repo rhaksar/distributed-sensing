@@ -11,9 +11,7 @@ import scipy.optimize as spo
 import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 
-'''
-Given a forest state or state slice, create a visualization
-'''
+
 def PlotForest(state):
     fig = pyplot.figure()
     ax = fig.add_subplot(111, aspect='equal')
@@ -118,7 +116,7 @@ def CreateSoloImage(state, position, dim):
     return image, rc_to_xy(state.shape[0], (r0+half_row, c0-half_row))
 
 
-def CreateMultiImage(state, positions, dim):
+def CreateJointImage(state, positions, dim):
     rows = []
     cols = []
     rowcol = []
@@ -158,7 +156,7 @@ def CreateMultiImage(state, positions, dim):
 '''
 Given an image, create an ordered lists of tasks (locations) with weights
 '''
-def CreateSoloTasks(image, lower_left_corner, location, memory, center):
+def CreateSoloTasks(image, lower_left_corner, location, memory, default):
     # cx, cy = col_to_x(image.shape[1]-1)/2 + 0.25, row_to_y(image.shape[0], 0)/2 + 0.25
     tasks = []
     neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -167,7 +165,7 @@ def CreateSoloTasks(image, lower_left_corner, location, memory, center):
 
     # if fires: tasks are (boundary) fires
     # if no fires and some/all burnt: tasks are (boundry) burnt trees
-    # if no fires and no burnt: task is "go to center"
+    # if no fires and no burnt: task is "go to default"
     fire = np.where(expand_image == 1)
     burnt = np.where(expand_image == 2)
     if len(fire[0]) >= 1:
@@ -196,10 +194,10 @@ def CreateSoloTasks(image, lower_left_corner, location, memory, center):
             if weight > 0 and not any(np.array_equal(task, m) for m in memory):
                 tasks.append([task, weight])
 
-    # all healthy: task is "go to center"
+    # all healthy: task is "go to default"
     if not tasks:
         if int(np.sum(image)) == 0:
-            center_vector = 1*(center-location) / np.linalg.norm(center-location, ord=2)
+            center_vector = 1*(default-location) / np.linalg.norm(default-location, ord=2)
             tasks.append([location+center_vector, 1])
 
     tasks_ordered = []
@@ -220,7 +218,7 @@ def CreateSoloTasks(image, lower_left_corner, location, memory, center):
     return tasks_ordered
 
 
-def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, center):
+def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, default):
     tasks = []
     neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
@@ -245,27 +243,31 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, ce
 
             weight = 0
             for (dr, dc) in neighbors:
-                if expand_image[r + dr, c + dc] == 0:
+                if expand_image[r+dr, c+dc] == 0:
                     weight += 1
-                elif expand_image[r + dr, c + dc] == -1:
+                elif expand_image[r+dr, c+dc] == -1:
                     weight += 0.5
 
             task = np.around(np.array([x, y]), decimals=2)
             if weight > 0 and not any(np.array_equal(task, m) for m in joint_memory):
                 tasks.append([task, weight])
 
-    print(tasks)
     if len(tasks) < locations.shape[0]:
         raise Exception
 
     cost_matrix = np.zeros((locations.shape[0], len(tasks)))
     for agent in range(locations.shape[0]):
-        cost_matrix[agent, :] = np.array([-s[1]+np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
+        cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
 
-    print(cost_matrix)
+    # print(cost_matrix)
 
     _, assignments = spo.linear_sum_assignment(cost_matrix)
     print(assignments)
+
+    tasks = [t[0] for t in tasks]
+    print(tasks)
+
+    return tasks, assignments
 
 
 def CreateSoloPlan(tasks, initial_position):
@@ -301,8 +303,57 @@ def CreateSoloPlan(tasks, initial_position):
     return actions, path
 
 
-def CreateMultiPlan(tasks, initial_positions):
-    pass
+def CreateJointPlan(tasks, assignments, initial_positions):
+    actions = []
+    path = []
+
+    num_agents = initial_positions.shape[0]
+    x0 = initial_positions
+
+    safe_radius = 0.5
+    scp_iterations = 5
+
+    T = 10
+    nominal_paths = np.zeros((2*num_agents, T+1))
+    nominal_actions = None
+
+    for _ in range(scp_iterations):
+        states = []
+
+        x = cvxpy.Variable((2 * num_agents, T + 1))
+        u = cvxpy.Variable((2 * num_agents, T))
+
+        for ai in range(num_agents):
+            for t in range(T):
+                cost = cvxpy.norm(x[2*ai:(2*ai+2), t+1]-tasks[assignments[ai]], p=2)
+                constraints = [x[2*ai:(2*ai+2), t+1] == x[2*ai:(2*ai+2), t] + u[2*ai:(2*ai+2), t],
+                               cvxpy.norm(u[2*ai:(2*ai+2), t], p=2) <= 0.5]
+
+                if t > 0 and ai < num_agents-1:
+                    for aj in np.arange(ai+1, num_agents, 1):
+                        xi = nominal_paths[2*ai:(2*ai+2), t]
+                        xj = nominal_paths[2*aj:(2*aj+2), t]
+                        x_diff = xj-xi
+                        constraints.append(x_diff[0]*(x[2*aj, t]-x[2*ai, t]) + x_diff[1]*(x[2*aj+1, t]-x[2*ai+1, t])
+                                           >= safe_radius*np.linalg.norm(x_diff, ord=2))
+
+                states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
+
+            constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :],
+                           cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2) <= 0]
+            states.append(cvxpy.Problem(cvxpy.Minimize(0), constraints))
+
+        problem = cvxpy.sum(states)
+        problem.solve()
+
+        nominal_paths = x.value
+        nominal_actions = u.value
+
+    path.append(nominal_paths)
+    actions.append(nominal_actions)
+
+    return actions, path
+
 
 if __name__ == "__main__":
 
@@ -342,7 +393,7 @@ if __name__ == "__main__":
     #     tasks = CreateSoloTasks(image, corner, agents['position'][0, :], agents['memory'][0], center)
     #
     #     # solve convex program to generate path
-    #     actions, path = CreateSoloPlan(tasks, agents['position'][0, :])
+    #     _, path = CreateSoloPlan(tasks, agents['position'][0, :])
     #     agents['position'][0, :] = path[0][:, -1]
     #
     #     ax.plot(path[0][0, :], path[0][1, :], Marker='.', MarkerSize=10, color='white')
@@ -361,10 +412,18 @@ if __name__ == "__main__":
     #     pyplot.show()
 
     # multi-agent example
-    image, corner = CreateMultiImage(sim.state, agents['position']-0.25, (5, 5))
+    cooperating_agents = np.array([0, 1, 2])
+    image, corner = CreateJointImage(sim.state, agents['position'][cooperating_agents, :]-0.25, (5, 5))
     ax = PlotForestImage(image, corner)
-    ax.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=10, color='blue')
+    ax.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
+            linestyle='', Marker='.', MarkerSize=10, color='blue')
 
-    CreateJointTasks(image, corner, agents['position'], list(itertools.chain.from_iterable(agents['memory'])), center)
+    joint_memory = list(itertools.chain.from_iterable(agents['memory']))
+    tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
+                                          joint_memory, center)
+
+    _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
+    for a in range(len(cooperating_agents)):
+        ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
 
     pyplot.show()
