@@ -246,11 +246,13 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, de
                 if expand_image[r+dr, c+dc] == 0:
                     weight += 1
                 elif expand_image[r+dr, c+dc] == -1:
-                    weight += 0.5
+                    weight += 0.35
 
             task = np.around(np.array([x, y]), decimals=2)
             if weight > 0 and not any(np.array_equal(task, m) for m in joint_memory):
                 tasks.append([task, weight])
+
+    # print(tasks)
 
     if len(tasks) < locations.shape[0]:
         raise Exception
@@ -259,13 +261,12 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, de
     for agent in range(locations.shape[0]):
         cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
 
-    # print(cost_matrix)
+    # print(np.around(cost_matrix, decimals=3))
 
     _, assignments = spo.linear_sum_assignment(cost_matrix)
-    print(assignments)
+    # print(assignments)
 
     tasks = [t[0] for t in tasks]
-    print(tasks)
 
     return tasks, assignments
 
@@ -310,25 +311,29 @@ def CreateJointPlan(tasks, assignments, initial_positions):
     num_agents = initial_positions.shape[0]
     x0 = initial_positions
 
-    safe_radius = 0.5
+    safe_radius = 0.3
     scp_iterations = 5
 
-    T = 10
+    T = 5
     nominal_paths = np.zeros((2*num_agents, T+1))
     nominal_actions = None
 
     for _ in range(scp_iterations):
         states = []
 
-        x = cvxpy.Variable((2 * num_agents, T + 1))
-        u = cvxpy.Variable((2 * num_agents, T))
+        x = cvxpy.Variable((2*num_agents, T+1))
+        u = cvxpy.Variable((2*num_agents, T))
 
         for ai in range(num_agents):
-            for t in range(T):
-                cost = cvxpy.norm(x[2*ai:(2*ai+2), t+1]-tasks[assignments[ai]], p=2)
-                constraints = [x[2*ai:(2*ai+2), t+1] == x[2*ai:(2*ai+2), t] + u[2*ai:(2*ai+2), t],
-                               cvxpy.norm(u[2*ai:(2*ai+2), t], p=2) <= 0.5]
+            for t in range(T+1):
+                cost = 0
+                constraints = []
+                if t < T:
+                    cost = cvxpy.norm(x[2*ai:(2*ai+2), t+1]-tasks[assignments[ai]], p=2)
+                    constraints = [x[2*ai:(2*ai+2), t+1] == x[2*ai:(2*ai+2), t] + u[2*ai:(2*ai+2), t],
+                                   cvxpy.norm(u[2*ai:(2*ai+2), t], p=2) <= 0.5]
 
+                # collision avoidance constraint for time interval [1, T]
                 if t > 0 and ai < num_agents-1:
                     for aj in np.arange(ai+1, num_agents, 1):
                         xi = nominal_paths[2*ai:(2*ai+2), t]
@@ -360,9 +365,9 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     agents = {'position': np.zeros((3, 2)), 'memory': [[], [], []]}
-    agents['position'][0, :] = np.array([8.25, 11.25])
-    agents['position'][1, :] = np.array([8.75, 10.75])
-    agents['position'][2, :] = np.array([9.25, 10.25])
+    agents['position'][0, :] = np.array([8.25, 11.25])  # np.array([14.25, 16.25])
+    agents['position'][1, :] = np.array([8.75, 10.75])  # np.array([15.75, 15.75])
+    agents['position'][2, :] = np.array([10.25, 10.75])  # np.array([16.75, 14.25])
 
     grid_size = 50
     center = np.array([12.5, 12.5])
@@ -372,8 +377,8 @@ if __name__ == "__main__":
         sim.step([])
 
     # plot forest and agent position
-    ax = PlotForest(sim.state)
-    ax.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=10, color='blue')
+    # ax = PlotForest(sim.state)
+    # ax.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=10, color='blue')
 
     # single agent example
     # agents['position'][0, :] = np.array([9.25, 9.25])
@@ -413,17 +418,34 @@ if __name__ == "__main__":
 
     # multi-agent example
     cooperating_agents = np.array([0, 1, 2])
-    image, corner = CreateJointImage(sim.state, agents['position'][cooperating_agents, :]-0.25, (5, 5))
-    ax = PlotForestImage(image, corner)
-    ax.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
-            linestyle='', Marker='.', MarkerSize=10, color='blue')
 
-    joint_memory = list(itertools.chain.from_iterable(agents['memory']))
-    tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
-                                          joint_memory, center)
+    for iteration in range(10):
+        print('iteration: %d' % (iteration + 1))
 
-    _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
-    for a in range(len(cooperating_agents)):
-        ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
+        # get joint image and plot
+        image, corner = CreateJointImage(sim.state, agents['position'][cooperating_agents, :]-0.25, (5, 5))
+        ax = PlotForestImage(image, corner)
+        ax.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
+                linestyle='', Marker='.', MarkerSize=10, color='blue')
 
-    pyplot.show()
+        # get tasks from image, accounting for joint memory
+        joint_memory = list(itertools.chain.from_iterable(agents['memory']))
+        tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
+                                              joint_memory, center)
+
+        # solve convex program for paths and add completed tasks to memory
+        _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
+        completed = [np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2) for idx in range(len(cooperating_agents))]
+        for idx, a in enumerate(cooperating_agents):
+            ax.plot(paths[0][2*idx, :], paths[0][2*idx+1, :], Marker='.', MarkerSize=10, color='white')
+            ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+            agents['position'][a, :] = paths[0][2*idx:(2*idx+2), -1]
+            agents['memory'][a].extend(completed)
+
+        # retain tasks still in view
+        for a in range(len(agents['memory'])):
+            agents['memory'][0] = [m for m in agents['memory'][a]
+                                   if -5/4 <= m[0]-agents['position'][a, 0] <= 5/4 and
+                                      -5/4 <= m[1]-agents['position'][a, 1] <= 5/4]
+
+        pyplot.show()
