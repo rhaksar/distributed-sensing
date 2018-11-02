@@ -188,7 +188,27 @@ def CreateSoloTasks(image, lower_left_corner, location, memory, default):
                 if expand_image[r+dr, c+dc] == 0:
                     weight += 1
                 elif expand_image[r+dr, c+dc] == -1:
-                    weight += 0.5
+                    weight += 0.35
+
+            task = np.around(np.array([x, y]), decimals=2)
+            if weight > 0 and not any(np.array_equal(task, m) for m in memory):
+                tasks.append([task, weight])
+
+    if not tasks and burnt[0]:
+        for _, (r, c) in enumerate(zip(burnt[0], burnt[1])):
+            # "c-1" and "r-1" are due to padding
+            # "+ 0.25" is due to cell width/height
+            x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
+            x += lower_left_corner[0] # location[0] - cx
+            y += lower_left_corner[1] # location[1] - cy
+
+            weight = 0
+            for (dr, dc) in neighbors:
+                if expand_image[r+dr, c+dc] == 0:
+                    weight += 1
+                elif expand_image[r+dr, c+dc] == -1:
+                    weight += 0.35
+            weight *= 0.5
 
             task = np.around(np.array([x, y]), decimals=2)
             if weight > 0 and not any(np.array_equal(task, m) for m in memory):
@@ -212,7 +232,7 @@ def CreateSoloTasks(image, lower_left_corner, location, memory, default):
         tasks_ordered.append(tasks[0])
         tasks = tasks[1:]
 
-    # print(tasks_ordered)
+    print(tasks_ordered)
 
     tasks_ordered = [t[0] for t in tasks_ordered]
     return tasks_ordered
@@ -237,7 +257,7 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, de
         for _, (r, c) in enumerate(zip(r_task, c_task)):
             # "c-1" and "r-1" are due to padding
             # "+ 0.25" is due to cell width/height
-            x, y = col_to_x(c - 1) + 0.25, row_to_y(image.shape[0], r - 1) + 0.25
+            x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
             x += lower_left_corner[0]  # location[0] - cx
             y += lower_left_corner[1]  # location[1] - cy
 
@@ -252,10 +272,29 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, de
             if weight > 0 and not any(np.array_equal(task, m) for m in joint_memory):
                 tasks.append([task, weight])
 
-    # print(tasks)
+    if len(tasks) < locations.shape[0] and burnt[0] is not None:
+        for _, (r, c) in enumerate(zip(burnt[0], burnt[1])):
+            x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
+            x += lower_left_corner[0]
+            y += lower_left_corner[1]
+
+            weight = 0
+            for (dr, dc) in neighbors:
+                if expand_image[r+dr, c+dc] == 0:
+                    weight += 1
+                elif expand_image[r+dr, c+dc] == -1:
+                    weight += 0.35
+            weight *= 0.5
+
+            task = np.around(np.array([x, y]), decimals=2)
+            if weight > 0 and not any(np.array_equal(task, m) for m in joint_memory):
+                    tasks.append([task, weight])
 
     if len(tasks) < locations.shape[0]:
-        raise Exception
+        for _ in range(locations.shape[0]-len(tasks)):
+            # center_vector = 1*(default-location) / np.linalg.norm(default-location, ord=2)
+            # tasks.append([location+center_vector, 1])
+            tasks.append([default, 1])
 
     cost_matrix = np.zeros((locations.shape[0], len(tasks)))
     for agent in range(locations.shape[0]):
@@ -339,14 +378,18 @@ def CreateJointPlan(tasks, assignments, initial_positions):
                         xi = nominal_paths[2*ai:(2*ai+2), t]
                         xj = nominal_paths[2*aj:(2*aj+2), t]
                         x_diff = xj-xi
-                        constraints.append(x_diff[0]*(x[2*aj, t]-x[2*ai, t]) + x_diff[1]*(x[2*aj+1, t]-x[2*ai+1, t])
-                                           >= safe_radius*np.linalg.norm(x_diff, ord=2))
+                        x_diff_norm = np.linalg.norm(x_diff, ord=2)
+                        if x_diff_norm <= 5*safe_radius:
+                            constraints.append(x_diff[0]*(x[2*aj, t]-x[2*ai, t]) + x_diff[1]*(x[2*aj+1, t]-x[2*ai+1, t])
+                                               >= safe_radius*x_diff_norm)
 
                 states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
 
-            constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :],
-                           cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2) <= 0]
-            states.append(cvxpy.Problem(cvxpy.Minimize(0), constraints))
+            # constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :],
+            #                cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2) <= 0]
+            constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :]]
+            cost = cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2)
+            states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
 
         problem = cvxpy.sum(states)
         problem.solve()
@@ -365,15 +408,17 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     agents = {'position': np.zeros((3, 2)), 'memory': [[], [], []]}
-    agents['position'][0, :] = np.array([8.25, 11.25])  # np.array([14.25, 16.25])
-    agents['position'][1, :] = np.array([8.75, 10.75])  # np.array([15.75, 15.75])
-    agents['position'][2, :] = np.array([10.25, 10.75])  # np.array([16.75, 14.25])
+    agents['position'][0, :] = np.array([0.75, 0.75])  # np.array([8.25, 11.25])  # np.array([14.25, 16.25])
+    agents['position'][1, :] = np.array([0.75, 1.25])  # np.array([8.75, 10.75])  # np.array([15.75, 15.75])
+    agents['position'][2, :] = np.array([1.25, 0.75])  # np.array([8.25, 10.75])  # np.array([16.75, 14.25])
+
+
 
     grid_size = 50
     center = np.array([12.5, 12.5])
     sim = FireSimulator(grid_size)
 
-    for i in range(15):
+    for i in range(1):
         sim.step([])
 
     # plot forest and agent position
@@ -382,7 +427,7 @@ if __name__ == "__main__":
 
     # single agent example
     # agents['position'][0, :] = np.array([9.25, 9.25])
-    # for iteration in range(17):
+    # for iteration in range(15):
     #     print('iteration: %d' %(iteration+1))
     #     # ax = PlotForest(sim.state)
     #
@@ -399,13 +444,15 @@ if __name__ == "__main__":
     #
     #     # solve convex program to generate path
     #     _, path = CreateSoloPlan(tasks, agents['position'][0, :])
-    #     agents['position'][0, :] = path[0][:, -1]
+    #     # agents['position'][0, :] = path[0][:, -1]
+    #     agents['position'][0, :] = path[0][:, 1]
     #
     #     ax.plot(path[0][0, :], path[0][1, :], Marker='.', MarkerSize=10, color='white')
     #     ax.plot(path[0][0, 0], path[0][1, 0], Marker='.', MarkerSize=15, color='blue')
     #
-    #     # add task to memory
-    #     agents['memory'][0].append(np.around(path[0][:, -1], decimals=2))
+    #     # add task to memory if agent completed task
+    #     if np.linalg.norm(agents['position'][0, :] - path[0][:, -1], ord=2) < 0.01:
+    #         agents['memory'][0].append(np.around(path[0][:, -1], decimals=2))
     #
     #     # retain tasks still in view
     #     agents['memory'][0] = [m for m in agents['memory'][0]
@@ -417,35 +464,100 @@ if __name__ == "__main__":
     #     pyplot.show()
 
     # multi-agent example
-    cooperating_agents = np.array([0, 1, 2])
+    # cooperating_agents = np.array([0, 1, 2])
+    # for iteration in range(10):
+    #     print('iteration: %d' % (iteration + 1))
+    #
+    #     # get joint image and plot
+    #     image, corner = CreateJointImage(sim.state, agents['position'][cooperating_agents, :]-0.25, (5, 5))
+    #     ax = PlotForestImage(image, corner)
+    #     ax.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
+    #             linestyle='', Marker='.', MarkerSize=10, color='blue')
+    #
+    #     # get tasks from image, accounting for joint memory
+    #     joint_memory = list(itertools.chain.from_iterable(agents['memory']))
+    #     tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
+    #                                           joint_memory, center)
+    #
+    #     # solve convex program for paths and determine completed tasks
+    #     _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
+    #     completed = []
+    #     for idx, a in enumerate(cooperating_agents):
+    #         ax.plot(paths[0][2*idx, :], paths[0][2*idx+1, :], Marker='.', MarkerSize=10, color='white')
+    #         ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+    #
+    #         # update position by taking first action
+    #         agents['position'][a, :] = paths[0][2*idx:(2*idx+2), 1]
+    #         if np.linalg.norm(paths[0][2*idx:(2*idx+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
+    #             completed.append(np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2))
+    #
+    #     # add completed tasks to memory and retain tasks still in view
+    #     # completed = [np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2) for idx in range(len(cooperating_agents))]
+    #     for a in cooperating_agents:
+    #         agents['memory'][a].extend(completed)
+    #
+    #         agents['memory'][a] = [m for m in agents['memory'][a]
+    #                                if -5/4 <= m[0]-agents['position'][a, 0] <= 5/4 and
+    #                                   -5/4 <= m[1]-agents['position'][a, 1] <= 5/4]
+    #
+    #     pyplot.show()
 
-    for iteration in range(15):
-        print('iteration: %d' % (iteration + 1))
+    # centralized planner example
+    agents = {'position': np.zeros((5, 2))}
+    agents['position'][0, :] = np.array([0.75, 0.75])
+    agents['position'][1, :] = np.array([0.75, 1.25])
+    agents['position'][2, :] = np.array([1.25, 0.75])
+    agents['position'][3, :] = np.array([0.25, 0.75])
+    agents['position'][4, :] = np.array([0.75, 0.25])
 
-        # get joint image and plot
-        image, corner = CreateJointImage(sim.state, agents['position'][cooperating_agents, :]-0.25, (5, 5))
-        ax = PlotForestImage(image, corner)
-        ax.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
-                linestyle='', Marker='.', MarkerSize=10, color='blue')
+    joint_memory = []
+    action = []
+    image = copy.copy(sim.state)  # image is entire forest
 
-        # get tasks from image, accounting for joint memory
-        joint_memory = list(itertools.chain.from_iterable(agents['memory']))
-        tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
-                                              joint_memory, center)
+    for iteration in range(100):
+        print('iteration: %d' % (iteration+1))
 
-        # solve convex program for paths and add completed tasks to memory
-        _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
-        completed = [np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2) for idx in range(len(cooperating_agents))]
-        for idx, a in enumerate(cooperating_agents):
-            ax.plot(paths[0][2*idx, :], paths[0][2*idx+1, :], Marker='.', MarkerSize=10, color='white')
-            ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
-            agents['position'][a, :] = paths[0][2*idx:(2*idx+2), -1]
-            agents['memory'][a].extend(completed)
+        if (iteration+1) % 5 == 0:
+            sim.step(action, dbeta=0.54)
+            joint_memory = []
+            action = []
+            image = copy.copy(sim.state)
+            print(len(sim.fires))
 
-        # retain tasks still in view
-        for a in range(len(agents['memory'])):
-            agents['memory'][a] = [m for m in agents['memory'][a]
-                                   if -5/4 <= m[0]-agents['position'][a, 0] <= 5/4 and
-                                      -5/4 <= m[1]-agents['position'][a, 1] <= 5/4]
+        # if (iteration+1) >= 30:
+        #     ax = PlotForestImage(image, (0, 0))
+        #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
+        #             linestyle='', Marker='.', MarkerSize=10, color='blue')
 
-        pyplot.show()
+        tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
+
+        _, paths = CreateJointPlan(tasks, assignments, agents['position'])
+        completed = []
+        for a in range(agents['position'].shape[0]):
+            # if (iteration+1) >= 30:
+            #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
+            #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+
+            agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
+            if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
+                completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
+
+                # convert completed task to action
+                r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
+                x = c+1
+                y = grid_size-r
+                if tuple((x, y)) not in action:
+                    action.append(tuple((x, y)))
+
+        joint_memory.extend(completed)
+
+    ax = PlotForestImage(image, (0, 0))
+    ax.plot(agents['position'][:, 0], agents['position'][:, 1],
+            linestyle='', Marker='.', MarkerSize=10, color='blue')
+
+    for a in range(agents['position'].shape[0]):
+        ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
+        ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+
+    pyplot.show()
+
