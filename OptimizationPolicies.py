@@ -3,10 +3,12 @@ from FireSimulator import FireSimulator
 import copy
 import cvxpy
 import itertools
+import matplotlib.collections as clt
 import matplotlib.patches as patches
 import matplotlib.pyplot as pyplot
 import numpy as np
 import scipy.optimize as spo
+import time
 
 import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
@@ -514,64 +516,138 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     # SingleAgentExample()
-    MultiAgentExample()
+    # MultiAgentExample()
 
     # centralized planner example
-    # agents = {'position': np.zeros((5, 2))}
-    # agents['position'][0, :] = np.array([0.75, 0.75])
-    # agents['position'][1, :] = np.array([0.75, 1.25])
-    # agents['position'][2, :] = np.array([1.25, 0.75])
+
+    # x = np.linspace(0, 6 * np.pi, 100)
+    # y = np.sin(x)
+
+    # You probably won't need this if you're embedding things in a tkinter plot...
+    # pyplot.ion()
+    #
+    # line1, = ax.plot(x, y, 'r-')  # Returns a tuple of line objects, thus the comma
+    #
+    # for phase in np.linspace(0, 10 * np.pi, 500):
+    #     line1.set_ydata(np.sin(x + phase))
+    #     fig.canvas.draw()
+    #     fig.canvas.flush_events()
+
+    agents = {'position': np.zeros((3, 2))}
+    agents['position'][0, :] = np.array([0.75, 0.75])
+    agents['position'][1, :] = np.array([0.75, 1.25])
+    agents['position'][2, :] = np.array([1.25, 0.75])
     # agents['position'][3, :] = np.array([0.25, 0.75])
     # agents['position'][4, :] = np.array([0.75, 0.25])
-    #
-    # joint_memory = []
-    # action = []
-    # image = copy.copy(sim.state)  # image is entire forest
-    #
-    # for iteration in range(100):
-    #     print('iteration: %d' % (iteration+1))
-    #
-    #     if (iteration+1) % 5 == 0:
-    #         sim.step(action, dbeta=0.54)
-    #         joint_memory = []
-    #         action = []
-    #         image = copy.copy(sim.state)
-    #         print(len(sim.fires))
-    #
-    #     # if (iteration+1) >= 30:
-    #     #     ax = PlotForestImage(image, (0, 0))
-    #     #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
-    #     #             linestyle='', Marker='.', MarkerSize=10, color='blue')
-    #
-    #     tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
-    #
-    #     _, paths = CreateJointPlan(tasks, assignments, agents['position'])
-    #     completed = []
-    #     for a in range(agents['position'].shape[0]):
-    #         # if (iteration+1) >= 30:
-    #         #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
-    #         #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
-    #
-    #         agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
-    #         if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
-    #             completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
-    #
-    #             # convert completed task to action
-    #             r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
-    #             x = c+1
-    #             y = grid_size-r
-    #             if tuple((x, y)) not in action:
-    #                 action.append(tuple((x, y)))
-    #
-    #     joint_memory.extend(completed)
-    #
-    # ax = PlotForestImage(image, (0, 0))
-    # ax.plot(agents['position'][:, 0], agents['position'][:, 1],
-    #         linestyle='', Marker='.', MarkerSize=10, color='blue')
-    #
-    # for a in range(agents['position'].shape[0]):
-    #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
-    #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
-    #
-    # pyplot.show()
+
+    # pyplot.ion()
+
+    fig = pyplot.figure()
+    ax = fig.add_subplot(111, aspect='equal')
+    ax.set_xlim(0, 25)
+    ax.set_ylim(0, 25)
+
+    grid_size = 50
+    sim = FireSimulator(grid_size)
+    sim.step([])
+
+    center = np.array([12.5, 12.5])
+
+    tree_patch_map = {}
+    trees = []
+    for r in range(sim.state.shape[0]):
+        for c in range(sim.state.shape[1]):
+            x = col_to_x(c)
+            y = row_to_y(sim.state.shape[0], r)
+
+            tree_patch_map[(r, c)] = len(tree_patch_map)
+            trees.append(patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6, zorder=0))
+
+    for tree in trees:
+        ax.add_artist(tree)
+
+    for r in range(sim.state.shape[0]):
+        for c in range(sim.state.shape[1]):
+            idx = tree_patch_map[(r, c)]
+            if sim.state[r, c] == 0:
+                trees[idx].set_color('green')
+            elif sim.state[r, c] == 1:
+                trees[idx].set_color('red')
+            elif sim.state[r, c] == 2:
+                trees[idx].set_color('black')
+
+    agent_viz = [None for a in range(agents['position'].shape[0])]
+    agent_plan_viz = [None for a in range(agents['position'].shape[0])]
+
+    # ax.figure.canvas.draw()
+    # time.sleep(1)
+
+    joint_memory = []
+    action = []
+    image = copy.copy(sim.state)  # image is entire forest
+
+    for iteration in range(35):
+        print('Iteration: %d' % (iteration+1))
+
+        if (iteration+1) % 5 == 0:
+            sim.step(action, dbeta=0.54)
+            joint_memory = []
+            action = []
+            image = copy.copy(sim.state)
+
+            for r in range(sim.state.shape[0]):
+                for c in range(sim.state.shape[1]):
+                    idx = tree_patch_map[(r, c)]
+                    if sim.state[r, c] == 0:
+                        trees[idx].set_color('green')
+                    elif sim.state[r, c] == 1:
+                        trees[idx].set_color('red')
+                    elif sim.state[r, c] == 2:
+                        trees[idx].set_color('black')
+
+            print('Number of fires: %d' % len(sim.fires))
+
+        # if (iteration+1) >= 30:
+        #     ax = PlotForestImage(image, (0, 0))
+        #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
+        #             linestyle='', Marker='.', MarkerSize=10, color='blue')
+
+        tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
+
+        _, paths = CreateJointPlan(tasks, assignments, agents['position'])
+        completed = []
+        for a in range(agents['position'].shape[0]):
+            # if (iteration+1) >= 30:
+            #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
+            #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+            if agent_viz[a] is None:
+                agent_viz[a], = ax.plot(agents['position'][a, 0], agents['position'][a, 1],
+                                        linestyle='', Marker='.', MarkerSize=10, color='blue', zorder=2)
+            else:
+                agent_viz[a].set_data(agents['position'][a, 0], agents['position'][a, 1])
+
+            if agent_plan_viz[a] is None:
+                agent_plan_viz[a], = ax.plot(paths[0][2*a, :], paths[0][2*a+1, :],
+                                             Marker='.', MarkerSize=10, color='white', zorder=1)
+            else:
+                agent_plan_viz[a].set_data(paths[0][2*a, :], paths[0][2*a+1, :])
+
+            agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
+            if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
+                completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
+
+                # convert completed task to action
+                r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
+                x = c+1
+                y = grid_size-r
+                if tuple((x, y)) not in action:
+                    action.append(tuple((x, y)))
+
+        joint_memory.extend(completed)
+
+        ax.figure.canvas.draw()
+        time.sleep(0.5)
+
+        # filename = 'iteration' + str(iteration+1) + '.png'
+        # pyplot.savefig(filename, bbox_inches='tight')
 
