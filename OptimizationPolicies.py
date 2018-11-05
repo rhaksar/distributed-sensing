@@ -14,9 +14,9 @@ import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def PlotForest(state):
-    fig = pyplot.figure()
-    ax = fig.add_subplot(111, aspect='equal')
+def PlotForest(state, axis):
+    # fig = pyplot.figure()
+    # ax = fig.add_subplot(111, aspect='equal')
     # pyplot.xlim([0, grid_size/2])
     # pyplot.ylim([0, grid_size/2])
     # pyplot.tick_params(axis='both', which='both',
@@ -38,14 +38,14 @@ def PlotForest(state):
             else:
                 rec.set_color('gray')
 
-            ax.add_patch(rec)
+            axis.add_patch(rec)
 
-    return ax
+    return axis
 
 
-def PlotForestImage(image, lower_left_corner):
-    fig = pyplot.figure()
-    ax = fig.add_subplot(111, aspect='equal')
+def PlotForestImage(image, lower_left_corner, axis):
+    # fig = pyplot.figure()
+    # ax = fig.add_subplot(111, aspect='equal')
 
     # cx, cy = col_to_x(image.shape[1]-1)/2 + 0.25, row_to_y(image.shape[0], 0)/2 + 0.25
 
@@ -67,9 +67,9 @@ def PlotForestImage(image, lower_left_corner):
             else:
                 rec.set_color('gray')
 
-            ax.add_patch(rec)
+            axis.add_patch(rec)
 
-    return ax
+    return axis
 
 
 def col_to_x(col):
@@ -406,7 +406,8 @@ def CreateJointPlan(tasks, assignments, initial_positions):
 
 
 def SingleAgentExample():
-    agent_position = np.array([9.25, 9.25])
+    # agent_position = np.array([9.25, 9.25])
+    agent_position = np.array([10.25, 9.25])
     agent_memory = []
 
     grid_size = 50
@@ -416,21 +417,29 @@ def SingleAgentExample():
     for i in range(15):
         sim.step([])
 
-    # plot forest and agent position
-    ax = PlotForest(sim.state)
-    ax.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=10, color='blue')
+    folder = 'sim_images/single_agent/'
 
-    for iteration in range(15):
+    for iteration in range(45):
         print('iteration: %d' %(iteration+1))
         # ax = PlotForest(sim.state)
+
+        fig = pyplot.figure(1)
+        ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
+        ax1.set_xlim(0, 25)
+        ax1.set_ylim(0, 25)
+        ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
+
+        # plot forest and agent position
+        ax1 = PlotForest(sim.state, ax1)
+        ax1.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=2, color='blue')
 
         # get agent image and plot
         # r = int(-2*(agents[1]['position'][1]-0.25) + grid_size - 1)
         # c = int(2*(agents[1]['position'][0]-0.25))
         # r, c = xy_to_rc(grid_size, agents[1]['position']-0.25)
         image, corner = CreateSoloImage(sim.state, agent_position-0.25, (5, 5))
-        ax = PlotForestImage(image, corner)
-        ax.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=10, color='blue')
+        ax2 = PlotForestImage(image, corner, ax2)
+        ax2.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=10, color='blue')
 
         # get tasks from image, accounting for memory
         tasks = CreateSoloTasks(image, corner, agent_position, agent_memory, center)
@@ -440,8 +449,9 @@ def SingleAgentExample():
         # agent_position = path[0][:, -1]
         agent_position = path[0][:, 1]
 
-        ax.plot(path[0][0, :], path[0][1, :], Marker='.', MarkerSize=10, color='white')
-        ax.plot(path[0][0, 0], path[0][1, 0], Marker='.', MarkerSize=15, color='blue')
+        for idx in range(len(path)):
+            ax2.plot(path[idx][0, :], path[idx][1, :], Marker='.', MarkerSize=10, color='white')
+        ax2.plot(path[0][0, 0], path[0][1, 0], Marker='.', MarkerSize=10, color='blue')
 
         # add task to memory if agent completed task
         if np.linalg.norm(agent_position - path[0][:, -1], ord=2) < 0.01:
@@ -453,7 +463,14 @@ def SingleAgentExample():
 
         # print(agent_memory)
 
+        x0, x1 = ax2.get_xlim()
+        y0, y1 = ax2.get_ylim()
+        ax2.set_aspect((x1-x0)/(y1-y0))
+
+        # filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
+        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
         pyplot.show()
+        pyplot.close(fig)
 
 
 def MultiAgentExample():
@@ -469,18 +486,27 @@ def MultiAgentExample():
     for i in range(15):
         sim.step([])
 
-    # plot forest and agent positions
-    ax = PlotForest(sim.state)
-    ax.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=10, color='blue')
+    folder = 'sim_images/multi_agent/'
 
     cooperating_agents = np.array([0, 1, 2])
-    for iteration in range(10):
+    for iteration in range(30):
         print('iteration: %d' % (iteration + 1))
+
+        fig = pyplot.figure(1)
+        ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
+        ax1.set_xlim(0, 25)
+        ax1.set_ylim(0, 25)
+        ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
+
+        # plot forest and agent positions
+        ax1 = PlotForest(sim.state, ax1)
+        ax1.plot(agents['position'][:, 0], agents['position'][:, 1], linestyle='', Marker='.', MarkerSize=2,
+                 color='blue')
 
         # get joint image and plot
         image, corner = CreateJointImage(sim.state, agents['position'][cooperating_agents, :]-0.25, (5, 5))
-        ax = PlotForestImage(image, corner)
-        ax.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
+        ax2 = PlotForestImage(image, corner, ax2)
+        ax2.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
                 linestyle='', Marker='.', MarkerSize=10, color='blue')
 
         # get tasks from image, accounting for joint memory
@@ -492,8 +518,8 @@ def MultiAgentExample():
         _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
         completed = []
         for idx, a in enumerate(cooperating_agents):
-            ax.plot(paths[0][2*idx, :], paths[0][2*idx+1, :], Marker='.', MarkerSize=10, color='white')
-            ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+            ax2.plot(paths[0][2*idx, :], paths[0][2*idx+1, :], Marker='.', MarkerSize=10, color='white')
+            ax2.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
 
             # update position by taking first action
             agents['position'][a, :] = paths[0][2*idx:(2*idx+2), 1]
@@ -509,145 +535,144 @@ def MultiAgentExample():
                                    if -5/4 <= m[0]-agents['position'][a, 0] <= 5/4 and
                                       -5/4 <= m[1]-agents['position'][a, 1] <= 5/4]
 
-        pyplot.show()
+        x0, x1 = ax2.get_xlim()
+        y0, y1 = ax2.get_ylim()
+        ax2.set_aspect((x1-x0)/(y1-y0))
+
+        filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
+        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+        pyplot.close(fig)
+
+
 
 if __name__ == "__main__":
 
     np.random.seed(42)
 
-    # SingleAgentExample()
+    SingleAgentExample()
     # MultiAgentExample()
 
     # centralized planner example
-
-    # x = np.linspace(0, 6 * np.pi, 100)
-    # y = np.sin(x)
-
-    # You probably won't need this if you're embedding things in a tkinter plot...
-    # pyplot.ion()
+    # agents = {'position': np.zeros((3, 2))}
+    # agents['position'][0, :] = np.array([0.75, 0.75])
+    # agents['position'][1, :] = np.array([0.75, 1.25])
+    # agents['position'][2, :] = np.array([1.25, 0.75])
+    # # agents['position'][3, :] = np.array([0.25, 0.75])
+    # # agents['position'][4, :] = np.array([0.75, 0.25])
     #
-    # line1, = ax.plot(x, y, 'r-')  # Returns a tuple of line objects, thus the comma
+    # fig = pyplot.figure()
+    # ax = fig.add_subplot(111, aspect='equal')
+    # ax.set_xlim(0, 25)
+    # ax.set_ylim(0, 25)
     #
-    # for phase in np.linspace(0, 10 * np.pi, 500):
-    #     line1.set_ydata(np.sin(x + phase))
-    #     fig.canvas.draw()
-    #     fig.canvas.flush_events()
-
-    agents = {'position': np.zeros((3, 2))}
-    agents['position'][0, :] = np.array([0.75, 0.75])
-    agents['position'][1, :] = np.array([0.75, 1.25])
-    agents['position'][2, :] = np.array([1.25, 0.75])
-    # agents['position'][3, :] = np.array([0.25, 0.75])
-    # agents['position'][4, :] = np.array([0.75, 0.25])
-
-    # pyplot.ion()
-
-    fig = pyplot.figure()
-    ax = fig.add_subplot(111, aspect='equal')
-    ax.set_xlim(0, 25)
-    ax.set_ylim(0, 25)
-
-    grid_size = 50
-    sim = FireSimulator(grid_size)
-    sim.step([])
-
-    center = np.array([12.5, 12.5])
-
-    tree_patch_map = {}
-    trees = []
-    for r in range(sim.state.shape[0]):
-        for c in range(sim.state.shape[1]):
-            x = col_to_x(c)
-            y = row_to_y(sim.state.shape[0], r)
-
-            tree_patch_map[(r, c)] = len(tree_patch_map)
-            trees.append(patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6, zorder=0))
-
-    for tree in trees:
-        ax.add_artist(tree)
-
-    for r in range(sim.state.shape[0]):
-        for c in range(sim.state.shape[1]):
-            idx = tree_patch_map[(r, c)]
-            if sim.state[r, c] == 0:
-                trees[idx].set_color('green')
-            elif sim.state[r, c] == 1:
-                trees[idx].set_color('red')
-            elif sim.state[r, c] == 2:
-                trees[idx].set_color('black')
-
-    agent_viz = [None for a in range(agents['position'].shape[0])]
-    agent_plan_viz = [None for a in range(agents['position'].shape[0])]
-
-    # ax.figure.canvas.draw()
-    # time.sleep(1)
-
-    joint_memory = []
-    action = []
-    image = copy.copy(sim.state)  # image is entire forest
-
-    for iteration in range(35):
-        print('Iteration: %d' % (iteration+1))
-
-        if (iteration+1) % 5 == 0:
-            sim.step(action, dbeta=0.54)
-            joint_memory = []
-            action = []
-            image = copy.copy(sim.state)
-
-            for r in range(sim.state.shape[0]):
-                for c in range(sim.state.shape[1]):
-                    idx = tree_patch_map[(r, c)]
-                    if sim.state[r, c] == 0:
-                        trees[idx].set_color('green')
-                    elif sim.state[r, c] == 1:
-                        trees[idx].set_color('red')
-                    elif sim.state[r, c] == 2:
-                        trees[idx].set_color('black')
-
-            print('Number of fires: %d' % len(sim.fires))
-
-        # if (iteration+1) >= 30:
-        #     ax = PlotForestImage(image, (0, 0))
-        #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
-        #             linestyle='', Marker='.', MarkerSize=10, color='blue')
-
-        tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
-
-        _, paths = CreateJointPlan(tasks, assignments, agents['position'])
-        completed = []
-        for a in range(agents['position'].shape[0]):
-            # if (iteration+1) >= 30:
-            #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
-            #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
-            if agent_viz[a] is None:
-                agent_viz[a], = ax.plot(agents['position'][a, 0], agents['position'][a, 1],
-                                        linestyle='', Marker='.', MarkerSize=10, color='blue', zorder=2)
-            else:
-                agent_viz[a].set_data(agents['position'][a, 0], agents['position'][a, 1])
-
-            if agent_plan_viz[a] is None:
-                agent_plan_viz[a], = ax.plot(paths[0][2*a, :], paths[0][2*a+1, :],
-                                             Marker='.', MarkerSize=10, color='white', zorder=1)
-            else:
-                agent_plan_viz[a].set_data(paths[0][2*a, :], paths[0][2*a+1, :])
-
-            agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
-            if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
-                completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
-
-                # convert completed task to action
-                r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
-                x = c+1
-                y = grid_size-r
-                if tuple((x, y)) not in action:
-                    action.append(tuple((x, y)))
-
-        joint_memory.extend(completed)
-
-        ax.figure.canvas.draw()
-        time.sleep(0.5)
-
-        # filename = 'iteration' + str(iteration+1) + '.png'
-        # pyplot.savefig(filename, bbox_inches='tight')
+    # grid_size = 50
+    # sim = FireSimulator(grid_size)
+    # sim.step([])
+    #
+    # center = np.array([12.5, 12.5])
+    #
+    # tree_patch_map = {}
+    # trees = []
+    # for r in range(sim.state.shape[0]):
+    #     for c in range(sim.state.shape[1]):
+    #         x = col_to_x(c)
+    #         y = row_to_y(sim.state.shape[0], r)
+    #
+    #         tree_patch_map[(r, c)] = len(tree_patch_map)
+    #         trees.append(patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6, zorder=0))
+    #
+    # for tree in trees:
+    #     ax.add_artist(tree)
+    #
+    # for r in range(sim.state.shape[0]):
+    #     for c in range(sim.state.shape[1]):
+    #         idx = tree_patch_map[(r, c)]
+    #         if sim.state[r, c] == 0:
+    #             trees[idx].set_color('green')
+    #         elif sim.state[r, c] == 1:
+    #             trees[idx].set_color('red')
+    #         elif sim.state[r, c] == 2:
+    #             trees[idx].set_color('black')
+    #
+    # agent_viz = [None for a in range(agents['position'].shape[0])]
+    # agent_plan_viz = [None for a in range(agents['position'].shape[0])]
+    #
+    # folder = 'sim_images/central_planning/'
+    #
+    # # pyplot.ion()
+    #
+    # # ax.figure.canvas.draw()
+    # # time.sleep(1)
+    #
+    # joint_memory = []
+    # action = []
+    # image = copy.copy(sim.state)  # image is entire forest
+    #
+    # for iteration in range(200):
+    #     print('Iteration: %d' % (iteration+1))
+    #
+    #     if (iteration+1) % 5 == 0:
+    #         sim.step(action, dbeta=0.54)
+    #         joint_memory = []
+    #         action = []
+    #         image = copy.copy(sim.state)
+    #
+    #         for r in range(sim.state.shape[0]):
+    #             for c in range(sim.state.shape[1]):
+    #                 idx = tree_patch_map[(r, c)]
+    #                 if sim.state[r, c] == 0:
+    #                     trees[idx].set_color('green')
+    #                 elif sim.state[r, c] == 1:
+    #                     trees[idx].set_color('red')
+    #                 elif sim.state[r, c] == 2:
+    #                     trees[idx].set_color('black')
+    #
+    #         print('Number of fires: %d' % len(sim.fires))
+    #
+    #     if sim.end:
+    #         break
+    #
+    #     # if (iteration+1) >= 30:
+    #     #     ax = PlotForestImage(image, (0, 0))
+    #     #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
+    #     #             linestyle='', Marker='.', MarkerSize=10, color='blue')
+    #
+    #     tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
+    #
+    #     _, paths = CreateJointPlan(tasks, assignments, agents['position'])
+    #     completed = []
+    #     for a in range(agents['position'].shape[0]):
+    #         # if (iteration+1) >= 30:
+    #         #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
+    #         #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+    #         if agent_viz[a] is None:
+    #             agent_viz[a], = ax.plot(agents['position'][a, 0], agents['position'][a, 1],
+    #                                     linestyle='', Marker='.', MarkerSize=10, color='blue', zorder=2)
+    #         else:
+    #             agent_viz[a].set_data(agents['position'][a, 0], agents['position'][a, 1])
+    #
+    #         if agent_plan_viz[a] is None:
+    #             agent_plan_viz[a], = ax.plot(paths[0][2*a, :], paths[0][2*a+1, :],
+    #                                          Marker='.', MarkerSize=10, color='white', zorder=1)
+    #         else:
+    #             agent_plan_viz[a].set_data(paths[0][2*a, :], paths[0][2*a+1, :])
+    #
+    #         agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
+    #         if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
+    #             completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
+    #
+    #             # convert completed task to action
+    #             r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
+    #             x = c+1
+    #             y = grid_size-r
+    #             if tuple((x, y))` not in action:
+    #                 action.append(tuple((x, y)))
+    #
+    #     joint_memory.extend(completed)
+    #
+    #     # ax.figure.canvas.draw()
+    #     # time.sleep(0.5)
+    #
+    #     filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
+    #     pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
