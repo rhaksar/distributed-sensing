@@ -86,8 +86,8 @@ class FireSimulator(object):
             raise ValueError('Fire initialization requires a forest size of at least 4x4')
 
         # start a square of fires at center
-        r_center = np.ceil(self.dims[0]/2, dtype=np.uint8)
-        c_center = np.ceil(self.dims[1]/2, dtype=np.uint8)
+        r_center = np.ceil(self.dims[0]/2).astype(np.uint8)
+        c_center = np.ceil(self.dims[1]/2).astype(np.uint8)
         delta = [k for k in range(-1, 3)]
         delta = itertools.product(delta, delta)
 
