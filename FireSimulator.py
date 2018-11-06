@@ -1,18 +1,17 @@
 import itertools
 from collections import defaultdict
-import math
 import numpy as np
 import warnings
 
 
 class FireSimulator(object):
     """
-    A simulation of a forest fire using a discrete probabilistic grid model
+    A simulation of a forest fire using a discrete probabilistic grid model.
     The model is adapted from literature:
       A. Somanath, S. Karaman, and K. Youcef-Toumi, "Controlling stochastic
       growth processes on lattices: Wildfire management with robotic fire
-      extinguishers," in 53rd IEEE Conference on Decision and Control.
-      IEEE, 2014, pp. 1432-1327
+      extinguishers," in 53rd IEEE Conference on Decision and Control (CDC),
+      2014, pp. 1432-1327
     """
 
     def __init__(self, dimension, rng=None, fire_init=None,
@@ -26,7 +25,7 @@ class FireSimulator(object):
 
         Inputs:
         - dimension: size of forest, integer or tuple of integers
-                     if an integer, the forest is a square grid
+                     if an integer, the forest is a square grid of size (dimension, dimension)
         - rng: random number generator seed to use for deterministic sampling
         - fire_init: list of tuples of (r, c) coordinates describing
                      positions of initial fires
@@ -87,7 +86,8 @@ class FireSimulator(object):
             raise ValueError('Fire initialization requires a forest size of at least 4x4')
 
         # start a square of fires at center
-        r_center, c_center = math.ceil(self.dims[0]/2), math.ceil(self.dims[1]/2)
+        r_center = np.ceil(self.dims[0]/2, dtype=np.uint8)
+        c_center = np.ceil(self.dims[1]/2, dtype=np.uint8)
         delta = [k for k in range(-1, 3)]
         delta = itertools.product(delta, delta)
 
