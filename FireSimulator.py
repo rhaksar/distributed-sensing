@@ -37,7 +37,7 @@ class FireSimulator(object):
 
         self.dims = (dimension, dimension) if isinstance(dimension, int) else dimension
 
-        self.alpha = defaultdict(lambda: 1-0.2763) if alpha is None else alpha
+        self.alpha = defaultdict(lambda: 0.2763) if alpha is None else alpha
         self.beta = defaultdict(lambda: np.exp(-1/10)) if beta is None else beta
         self.model = model
 
@@ -77,21 +77,20 @@ class FireSimulator(object):
     def _start_fire(self):
         """
         Helper function to specify initial fire locations in the forest.
-        Assumes forest is at least 4x4 size.
 
         Inputs/Outputs:
          None
         """
-        if self.dims[0] < 4 or self.dims[1] < 4:
-            raise ValueError('Fire initialization requires a forest size of at least 4x4')
 
-        # start a square of fires at center
-        r_center = np.ceil(self.dims[0]/2).astype(np.uint8)
-        c_center = np.ceil(self.dims[1]/2).astype(np.uint8)
-        delta = [k for k in range(-1, 3)]
-        delta = itertools.product(delta, delta)
+        # start a 4x4 square of fires at center, unless dimensions are too small
+        r_center = np.floor((self.dims[0]-1)/2).astype(np.uint8)
+        c_center = np.floor((self.dims[1]-1)/2).astype(np.uint8)
 
-        for (dr, dc) in delta:
+        delta_r = [0] if self.dims[0]<4 else [k for k in range(-1, 3)]
+        delta_c = [0] if self.dims[1]<4 else [k for k in range(-1, 3)]
+        deltas = itertools.product(delta_r, delta_c)
+
+        for (dr, dc) in deltas:
             r, c = r_center+dr, c_center+dc
             self.fires.append((r, c))
             self.state[r, c] = 1
@@ -128,7 +127,7 @@ class FireSimulator(object):
                           'the probability of persisting is less than zero')
 
         sample = np.random.rand()
-        if sample > threshold:
+        if sample <= (1-threshold):
             self.state[fire[0], fire[1]] = 2
             self.stats[1] -= 1
             self.stats[2] += 1
@@ -180,7 +179,7 @@ class FireSimulator(object):
 
                         # determine the probability of catching on fire and sample
                         if self.model == 'exponential':
-                            p = 1-(self.alpha[(r, c)]**num_neighbor_fires)
+                            p = 1-((1-self.alpha[(r, c)])**num_neighbor_fires)
                         elif self.model == 'linear':
                             p = self.alpha[(r, c)]*num_neighbor_fires
                         else:
@@ -215,6 +214,7 @@ class FireSimulator(object):
         if not self.fires:
             self.iter += 1
             self.end = True
+            self.early_end = True
             return
 
         self.iter += 1
