@@ -8,6 +8,7 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as pyplot
 import numpy as np
 import scipy.optimize as spo
+import scipy.spatial as sps
 import time
 
 import matplotlib as mpl
@@ -97,12 +98,12 @@ def xy_to_rc(y_limit, xy):
 
 
 '''
-Create a slice of the forest state, padded with zeros if out of bounds
+Create a slice of the forest state, padded with -2 if out of bounds
 Image is centered at "position"
 '''
 def CreateSoloImage(state, position, dim):
     r0, c0 = xy_to_rc(state.shape[0], position)
-    image = np.zeros(dim).astype(np.int8)
+    image = -2*np.ones(dim).astype(np.int8)
 
     half_row = (dim[0]-1)//2
     half_col = (dim[1]-1)//2
@@ -153,6 +154,36 @@ def CreateJointImage(state, positions, dim):
                     image[ri, ci] = 0
 
     return image, (min_x, min_y)
+
+
+def CreateTasks(image, lower_left_corner):
+    tasks = []
+    neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+    expand_image = np.pad(image, ((1, 1), (1, 1)), 'constant',
+                          constant_values=((-1, -1), (-1, -1)))
+
+    fire = np.where(expand_image == 1)
+    if not len(fire[0]):
+        return tasks
+
+    for _, (r, c) in enumerate(zip(fire[0], fire[1])):
+        x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
+        x += lower_left_corner[0]
+        y += lower_left_corner[1]
+
+        weight = 0
+        for (dr, dc) in neighbors:
+            if expand_image[r+dr, c+dc] == 0:
+                weight += 1
+            elif expand_image[r+dr, c+dc] == -1:
+                weight += 0.35
+
+        if weight > 0:
+            t = np.around(np.array([x, y]), decimals=2)
+            tasks.append((t, weight))
+
+    return tasks
 
 
 '''
@@ -230,7 +261,8 @@ def CreateSoloTasks(image, lower_left_corner, location, memory, default):
             p = tasks_ordered[-1][0]
 
         # tasks.sort(key=lambda s: (np.linalg.norm(s[0]-p, ord=2), -s[1]))
-        tasks.sort(key=lambda s: s[1]-np.linalg.norm(s[0]-p, ord=2), reverse=True)
+        # tasks.sort(key=lambda s: s[1]-np.linalg.norm(s[0]-p, ord=2), reverse=True)
+        tasks.sort(key=lambda s: s[1]*np.exp(-5*np.linalg.norm(s[0]-p, ord=2)), reverse=True)
         tasks_ordered.append(tasks[0])
         tasks = tasks[1:]
 
@@ -300,7 +332,8 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, de
 
     cost_matrix = np.zeros((locations.shape[0], len(tasks)))
     for agent in range(locations.shape[0]):
-        cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
+        # cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
+        cost_matrix[agent, :] = -1*np.array([s[1]*np.exp(-1*np.linalg.norm(s[0]-locations[agent, :], ord=2)) for s in tasks])
 
     # print(np.around(cost_matrix, decimals=3))
 
@@ -434,7 +467,7 @@ def SingleAgentExample():
     agent_memory = []
 
     grid_size = 50
-    center = np.array([12.5, 12.5])
+    # center = np.array([12.5, 12.5])
     sim = FireSimulator(grid_size)
 
     for i in range(15):
@@ -442,7 +475,7 @@ def SingleAgentExample():
 
     folder = 'sim_images/single_agent/'
 
-    for iteration in range(45):
+    for iteration in range(20):
         print('iteration: %d' %(iteration+1))
         # ax = PlotForest(sim.state)
 
@@ -465,10 +498,33 @@ def SingleAgentExample():
         ax2.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=10, color='blue')
 
         # get tasks from image, accounting for memory
-        tasks = CreateSoloTasks(image, corner, agent_position, agent_memory, center)
+        # tasks = CreateSoloTasks(image, corner, agent_position, agent_memory, center)
+
+        tasks = CreateTasks(image, corner)
+        tasks = [t for t in tasks if tuple(t[0]) not in agent_memory]
+
+        tasks_ordered = []
+        if not len(tasks):
+            # explore
+            pass
+        else:
+            # order control tasks
+            for i in range(len(tasks)):
+                if i == 0:
+                    p = agent_position
+                else:
+                    p = tasks_ordered[-1][0]
+
+                # tasks.sort(key=lambda s: (np.linalg.norm(s[0]-p, ord=2), -s[1]))
+                # tasks.sort(key=lambda s: s[1]-np.linalg.norm(s[0]-p, ord=2), reverse=True)
+                tasks.sort(key=lambda s: s[1]*np.exp(-2*np.linalg.norm(s[0]-p, ord=2)), reverse=True)
+                tasks_ordered.append(tasks[0])
+                tasks = tasks[1:]
+
+            tasks_ordered = [t[0] for t in tasks_ordered]
 
         # solve convex program to generate path
-        _, path = CreateSoloPlan(tasks, agent_position)
+        _, path = CreateSoloPlan(tasks_ordered, agent_position)
         # agent_position = path[0][:, -1]
         agent_position = path[0][:, 1]
 
@@ -477,8 +533,8 @@ def SingleAgentExample():
         ax2.plot(path[0][0, 0], path[0][1, 0], Marker='.', MarkerSize=10, color='blue')
 
         # add task to memory if agent completed task
-        if np.linalg.norm(agent_position - path[0][:, -1], ord=2) < 0.01:
-            agent_memory.append(np.around(path[0][:, -1], decimals=2))
+        if np.linalg.norm(agent_position-path[0][:, -1], ord=2) < 0.01:
+            agent_memory.append(tuple(np.around(path[0][:, -1], decimals=2)))
 
         # retain tasks still in view
         agent_memory = [m for m in agent_memory if -5/4 <= m[0]-agent_position[0] <= 5/4 and
@@ -512,7 +568,7 @@ def MultiAgentExample():
     folder = 'sim_images/multi_agent/'
 
     cooperating_agents = np.array([0, 1, 2])
-    for iteration in range(30):
+    for iteration in range(10):
         print('iteration: %d' % (iteration + 1))
 
         fig = pyplot.figure(1)
@@ -562,8 +618,10 @@ def MultiAgentExample():
         y0, y1 = ax2.get_ylim()
         ax2.set_aspect((x1-x0)/(y1-y0))
 
-        filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
-        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+        # filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
+        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+
+        pyplot.show()
         pyplot.close(fig)
 
 
@@ -571,138 +629,138 @@ if __name__ == "__main__":
 
     np.random.seed(42)
 
-    # SingleAgentExample()
+    SingleAgentExample()
     # MultiAgentExample()
 
-    # centralized planner example
-    agents = {'position': None}
-    # agents['position'][0, :] = np.array([0.75, 0.75])
-    # agents['position'][1, :] = np.array([0.75, 1.25])
-    # agents['position'][2, :] = np.array([1.25, 0.75])
-    # agents['position'][3, :] = np.array([0.25, 0.75])
-    # agents['position'][4, :] = np.array([0.75, 0.25])
-
-    fig = pyplot.figure()
-    ax = fig.add_subplot(111, aspect='equal')
-    ax.set_xlim(0, 25)
-    ax.set_ylim(0, 25)
-
-    grid_size = 50
-    sim = FireSimulator(grid_size)
-    # sim.step([])
-
-    center = np.array([12.5, 12.5])
-
-    tree_patch_map = {}
-    trees = []
-    for r in range(sim.state.shape[0]):
-        for c in range(sim.state.shape[1]):
-            x = col_to_x(c)
-            y = row_to_y(sim.state.shape[0], r)
-
-            tree_patch_map[(r, c)] = len(tree_patch_map)
-            trees.append(patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6, zorder=0))
-
-    for tree in trees:
-        ax.add_artist(tree)
-
-    for r in range(sim.state.shape[0]):
-        for c in range(sim.state.shape[1]):
-            idx = tree_patch_map[(r, c)]
-            if sim.state[r, c] == 0:
-                trees[idx].set_color('green')
-            elif sim.state[r, c] == 1:
-                trees[idx].set_color('red')
-            elif sim.state[r, c] == 2:
-                trees[idx].set_color('black')
-
-    # agent_viz = [None for a in range(agents['position'].shape[0])]
-    # agent_plan_viz = [None for a in range(agents['position'].shape[0])]
-
-    folder = 'sim_images/central_planning/'
-
-    # pyplot.ion()
-
-    # ax.figure.canvas.draw()
-    # time.sleep(1)
-
-    joint_memory = []
-    action = []
-    image = copy.copy(sim.state)  # image is entire forest
-
-    for iteration in range(200):
-        print('Iteration: %d' % (iteration+1))
-
-        agents['position'] = Dispatch(agents['position'], iteration)
-        # print(agents['position'])
-
-        if (iteration+1) % 5 == 0:
-            sim.step(action, dbeta=0.54)
-            joint_memory = []
-            action = []
-            image = copy.copy(sim.state)
-
-            # for r in range(sim.state.shape[0]):
-            #     for c in range(sim.state.shape[1]):
-            #         idx = tree_patch_map[(r, c)]
-            #         if sim.state[r, c] == 0:
-            #             trees[idx].set_color('green')
-            #         elif sim.state[r, c] == 1:
-            #             trees[idx].set_color('red')
-            #         elif sim.state[r, c] == 2:
-            #             trees[idx].set_color('black')
-
-            print('Number of fires: %d' % len(sim.fires))
-
-        if sim.end or sim.early_end:
-            print(sim.stats)
-            break
-
-        # if (iteration+1) >= 30:
-        #     ax = PlotForestImage(image, (0, 0))
-        #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
-        #             linestyle='', Marker='.', MarkerSize=10, color='blue')
-
-        # t0 = time.time()
-        tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
-        # t1 = time.time()
-        # print(t1-t0)
-
-        # t0 = time.time()
-        _, paths = CreateJointPlan(tasks, assignments, agents['position'])
-        # t1 = time.time()
-        # print(t1-t0)
-        completed = []
-        for a in range(agents['position'].shape[0]):
-            # if (iteration+1) >= 30:
-            #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
-            #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
-            # if agent_viz[a] is None:
-            #     agent_viz[a], = ax.plot(agents['position'][a, 0], agents['position'][a, 1],
-            #                             linestyle='', Marker='.', MarkerSize=10, color='blue', zorder=2)
-            # else:
-            #     agent_viz[a].set_data(agents['position'][a, 0], agents['position'][a, 1])
-            #
-            # if agent_plan_viz[a] is None:
-            #     agent_plan_viz[a], = ax.plot(paths[0][2*a, :], paths[0][2*a+1, :],
-            #                                  Marker='.', MarkerSize=10, color='white', zorder=1)
-            # else:
-            #     agent_plan_viz[a].set_data(paths[0][2*a, :], paths[0][2*a+1, :])
-
-            agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
-            if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
-                completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
-
-                # convert completed task to action
-                r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
-                # x = c+1
-                # y = grid_size-r
-                if tuple((r, c)) not in action:
-                    action.append(tuple((r, c)))
-
-        joint_memory.extend(completed)
-
-    print('sim done')
+    # # centralized planner example
+    # agents = {'position': None}
+    # # agents['position'][0, :] = np.array([0.75, 0.75])
+    # # agents['position'][1, :] = np.array([0.75, 1.25])
+    # # agents['position'][2, :] = np.array([1.25, 0.75])
+    # # agents['position'][3, :] = np.array([0.25, 0.75])
+    # # agents['position'][4, :] = np.array([0.75, 0.25])
+    #
+    # fig = pyplot.figure()
+    # ax = fig.add_subplot(111, aspect='equal')
+    # ax.set_xlim(0, 25)
+    # ax.set_ylim(0, 25)
+    #
+    # grid_size = 50
+    # sim = FireSimulator(grid_size)
+    # # sim.step([])
+    #
+    # center = np.array([12.5, 12.5])
+    #
+    # tree_patch_map = {}
+    # trees = []
+    # for r in range(sim.state.shape[0]):
+    #     for c in range(sim.state.shape[1]):
+    #         x = col_to_x(c)
+    #         y = row_to_y(sim.state.shape[0], r)
+    #
+    #         tree_patch_map[(r, c)] = len(tree_patch_map)
+    #         trees.append(patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6, zorder=0))
+    #
+    # for tree in trees:
+    #     ax.add_artist(tree)
+    #
+    # for r in range(sim.state.shape[0]):
+    #     for c in range(sim.state.shape[1]):
+    #         idx = tree_patch_map[(r, c)]
+    #         if sim.state[r, c] == 0:
+    #             trees[idx].set_color('green')
+    #         elif sim.state[r, c] == 1:
+    #             trees[idx].set_color('red')
+    #         elif sim.state[r, c] == 2:
+    #             trees[idx].set_color('black')
+    #
+    # # agent_viz = [None for a in range(agents['position'].shape[0])]
+    # # agent_plan_viz = [None for a in range(agents['position'].shape[0])]
+    #
+    # folder = 'sim_images/central_planning/'
+    #
+    # # pyplot.ion()
+    #
+    # # ax.figure.canvas.draw()
+    # # time.sleep(1)
+    #
+    # joint_memory = []
+    # action = []
+    # image = copy.copy(sim.state)  # image is entire forest
+    #
+    # for iteration in range(200):
+    #     print('Iteration: %d' % (iteration+1))
+    #
+    #     agents['position'] = Dispatch(agents['position'], iteration)
+    #     # print(agents['position'])
+    #
+    #     if (iteration+1) % 5 == 0:
+    #         sim.step(action, dbeta=0.54)
+    #         joint_memory = []
+    #         action = []
+    #         image = copy.copy(sim.state)
+    #
+    #         # for r in range(sim.state.shape[0]):
+    #         #     for c in range(sim.state.shape[1]):
+    #         #         idx = tree_patch_map[(r, c)]
+    #         #         if sim.state[r, c] == 0:
+    #         #             trees[idx].set_color('green')
+    #         #         elif sim.state[r, c] == 1:
+    #         #             trees[idx].set_color('red')
+    #         #         elif sim.state[r, c] == 2:
+    #         #             trees[idx].set_color('black')
+    #
+    #         print('Number of fires: %d' % len(sim.fires))
+    #
+    #     if sim.end or sim.early_end:
+    #         print(sim.stats)
+    #         break
+    #
+    #     # if (iteration+1) >= 30:
+    #     #     ax = PlotForestImage(image, (0, 0))
+    #     #     ax.plot(agents['position'][:, 0], agents['position'][:, 1],
+    #     #             linestyle='', Marker='.', MarkerSize=10, color='blue')
+    #
+    #     # t0 = time.time()
+    #     tasks, assignments = CreateJointTasks(image, (0, 0), agents['position'], joint_memory, center)
+    #     # t1 = time.time()
+    #     # print(t1-t0)
+    #
+    #     # t0 = time.time()
+    #     _, paths = CreateJointPlan(tasks, assignments, agents['position'])
+    #     # t1 = time.time()
+    #     # print(t1-t0)
+    #     completed = []
+    #     for a in range(agents['position'].shape[0]):
+    #         # if (iteration+1) >= 30:
+    #         #     ax.plot(paths[0][2*a, :], paths[0][2*a+1, :], Marker='.', MarkerSize=10, color='white')
+    #         #     ax.plot(agents['position'][a, 0], agents['position'][a, 1], Marker='.', MarkerSize=10, color='blue')
+    #         # if agent_viz[a] is None:
+    #         #     agent_viz[a], = ax.plot(agents['position'][a, 0], agents['position'][a, 1],
+    #         #                             linestyle='', Marker='.', MarkerSize=10, color='blue', zorder=2)
+    #         # else:
+    #         #     agent_viz[a].set_data(agents['position'][a, 0], agents['position'][a, 1])
+    #         #
+    #         # if agent_plan_viz[a] is None:
+    #         #     agent_plan_viz[a], = ax.plot(paths[0][2*a, :], paths[0][2*a+1, :],
+    #         #                                  Marker='.', MarkerSize=10, color='white', zorder=1)
+    #         # else:
+    #         #     agent_plan_viz[a].set_data(paths[0][2*a, :], paths[0][2*a+1, :])
+    #
+    #         agents['position'][a, :] = paths[0][2*a:(2*a+2), 1]
+    #         if np.linalg.norm(paths[0][2*a:(2*a+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
+    #             completed.append(np.around(paths[0][2*a:(2*a+2), -1], decimals=2))
+    #
+    #             # convert completed task to action
+    #             r, c = xy_to_rc(grid_size, paths[0][2*a:(2*a+2), -1]-0.25)
+    #             # x = c+1
+    #             # y = grid_size-r
+    #             if tuple((r, c)) not in action:
+    #                 action.append(tuple((r, c)))
+    #
+    #     joint_memory.extend(completed)
+    #
+    # print('sim done')
 
         # ax.figure.canvas.draw()
         # time.sleep(0.5)
@@ -710,3 +768,23 @@ if __name__ == "__main__":
         # filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
         # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
+    # grid_size = 50
+    # sim = FireSimulator(grid_size)
+    #
+    # for i in range(15):
+    #     sim.step([])
+    #
+    # points = []
+    # for r in range(grid_size):
+    #     for c in range(grid_size):
+    #         x, y = rc_to_xy(grid_size, (r, c))
+    #         if sim.state[r, c] == sim.on_fire:
+    #             w = 1
+    #         else:
+    #             w = 0
+    #
+    #         points.append((x, y, w))
+    #
+    # points = np.array(points)
+    # vor = sps.Voronoi(points)
+    # print('done')
