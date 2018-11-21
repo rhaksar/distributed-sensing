@@ -308,7 +308,7 @@ def CreateJointTasks(joint_image, lower_left_corner, locations, joint_memory, de
 
     if len(tasks) < locations.shape[0] and burnt[0] is not None:
         for _, (r, c) in enumerate(zip(burnt[0], burnt[1])):
-            x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
+            x, y = col_to_x(c-1)+0.25, row_to_y(joint_image.shape[0], r-1)+0.25
             x += lower_left_corner[0]
             y += lower_left_corner[1]
 
@@ -352,9 +352,6 @@ def CreateSoloPlan(tasks, initial_position):
     actions = []
     path = []
     for idx, task in enumerate(tasks):
-        if idx > 0:
-            x0 = next_x0
-
         T = np.maximum(int(np.ceil((1/0.5)*np.linalg.norm(x0-task, ord=2))), 1)
         x = cvxpy.Variable((2, T+1))
         u = cvxpy.Variable((2, T))
@@ -374,6 +371,8 @@ def CreateSoloPlan(tasks, initial_position):
         next_x0 = x.value[:, T]
         path.append(x.value)
         actions.append(u.value)
+
+        x0 = next_x0
 
     return actions, path
 
@@ -464,7 +463,20 @@ def Dispatch(positions, iteration):
 def SingleAgentExample():
     # agent_position = np.array([9.25, 9.25])
     agent_position = np.array([10.25, 9.25])
+    # agent_position = np.array([0.75, 0.75])
     agent_memory = []
+    agent_time = 0
+
+    x_explore = np.linspace(2.5, 22.5, 5, endpoint=True) - 0.25
+    y_explore = np.linspace(2.5, 22.5, 5, endpoint=True) - 0.25
+    X_explore, Y_explore = np.meshgrid(x_explore, y_explore)
+
+    d = np.maximum(np.abs(X_explore-12.25), np.abs(Y_explore-12.25))
+    # d = (X_explore-12.25)**2 + (Y_explore-12.25)**2
+    d /= np.amax(d)
+
+    W_explore = 0.5*np.ones_like(X_explore) - 0.2*d
+    t_explore = np.zeros_like(W_explore)
 
     grid_size = 50
     # center = np.array([12.5, 12.5])
@@ -475,7 +487,7 @@ def SingleAgentExample():
 
     folder = 'sim_images/single_agent/'
 
-    for iteration in range(20):
+    for iteration in range(1):
         print('iteration: %d' %(iteration+1))
         # ax = PlotForest(sim.state)
 
@@ -483,6 +495,8 @@ def SingleAgentExample():
         ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
         ax1.set_xlim(0, 25)
         ax1.set_ylim(0, 25)
+        ax1.plot(X_explore, Y_explore, linestyle='', Marker='.', Markersize=10, color='orange')
+
         ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
 
         # plot forest and agent position
@@ -504,9 +518,22 @@ def SingleAgentExample():
         tasks = [t for t in tasks if tuple(t[0]) not in agent_memory]
 
         tasks_ordered = []
+        mode = None
+        min_idx = None
         if not len(tasks):
             # explore
-            pass
+            entropy = W_explore*np.log(W_explore) + (1-W_explore)*np.log(1-W_explore)
+
+            # distances = (X_explore-agent_position[0])**2 + (Y_explore-agent_position[1])**2
+            # scores = entropy*np.exp(-distances)
+
+            distances = np.maximum(np.abs(X_explore-agent_position[0]), np.abs(Y_explore-agent_position[1]))
+            scores = entropy*(1/(distances + 1e-5))
+            # print(np.around(scores, decimals=4))
+            min_idx = np.unravel_index(np.argmin(scores), scores.shape)
+
+            tasks_ordered = [np.array([X_explore[min_idx], Y_explore[min_idx]])]
+            mode = 'explore'
         else:
             # order control tasks
             for i in range(len(tasks)):
@@ -515,13 +542,13 @@ def SingleAgentExample():
                 else:
                     p = tasks_ordered[-1][0]
 
-                # tasks.sort(key=lambda s: (np.linalg.norm(s[0]-p, ord=2), -s[1]))
-                # tasks.sort(key=lambda s: s[1]-np.linalg.norm(s[0]-p, ord=2), reverse=True)
-                tasks.sort(key=lambda s: s[1]*np.exp(-2*np.linalg.norm(s[0]-p, ord=2)), reverse=True)
+                tasks.sort(key=lambda s: s[1]*np.exp(-4*np.linalg.norm(s[0]-p, ord=2)), reverse=True)
+                # tasks.sort(key=lambda s: s[1]/(np.linalg.norm(s[0]-p, ord=1) + 1e-10), reverse=True)
                 tasks_ordered.append(tasks[0])
                 tasks = tasks[1:]
 
             tasks_ordered = [t[0] for t in tasks_ordered]
+            mode = 'control'
 
         # solve convex program to generate path
         _, path = CreateSoloPlan(tasks_ordered, agent_position)
@@ -532,13 +559,23 @@ def SingleAgentExample():
             ax2.plot(path[idx][0, :], path[idx][1, :], Marker='.', MarkerSize=10, color='white')
         ax2.plot(path[0][0, 0], path[0][1, 0], Marker='.', MarkerSize=10, color='blue')
 
-        # add task to memory if agent completed task
-        if np.linalg.norm(agent_position-path[0][:, -1], ord=2) < 0.01:
+        # add control task to memory if agent completed task
+        if mode == 'control' and np.linalg.norm(agent_position-path[0][:, -1], ord=2)<0.01:
             agent_memory.append(tuple(np.around(path[0][:, -1], decimals=2)))
 
-        # retain tasks still in view
+        # update exploration node if agent close enough
+        if mode == 'explore' and np.linalg.norm(agent_position-path[0][:, -1], ord=2)<0.01:
+            t_explore[min_idx] = agent_time
+            if np.any(image == 1):
+                W_explore[min_idx] = 1-1e-8
+            else:
+                W_explore[min_idx] = 0+1e-8
+
+        # retain control tasks still in view
         agent_memory = [m for m in agent_memory if -5/4 <= m[0]-agent_position[0] <= 5/4 and
                                                    -5/4 <= m[1]-agent_position[1] <= 5/4]
+
+        agent_time += 1
 
         # print(agent_memory)
 
@@ -548,15 +585,17 @@ def SingleAgentExample():
 
         # filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
         # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+
         pyplot.show()
         pyplot.close(fig)
 
 
 def MultiAgentExample():
-    agents = {'position': np.zeros((3, 2)), 'memory': [[], [], []]}
-    agents['position'][0, :] = np.array([8.25, 11.25])  # np.array([14.25, 16.25])
-    agents['position'][1, :] = np.array([8.75, 10.75])  # np.array([15.75, 15.75])
-    agents['position'][2, :] = np.array([8.25, 10.75])  # np.array([16.75, 14.25])
+    agents = {'position': np.zeros((4, 2)), 'memory': [[], [], [], []]}
+    agents['position'][0, :] = np.array([6.75, 11.25])  # np.array([14.25, 16.25])
+    agents['position'][1, :] = np.array([7.75, 10.75])  # np.array([15.75, 15.75])
+    agents['position'][2, :] = np.array([7.25, 10.75])  # np.array([16.75, 14.25])
+    agents['position'][3, :] = np.array([6.25, 10.75])
 
     grid_size = 50
     center = np.array([12.5, 12.5])
@@ -567,8 +606,8 @@ def MultiAgentExample():
 
     folder = 'sim_images/multi_agent/'
 
-    cooperating_agents = np.array([0, 1, 2])
-    for iteration in range(10):
+    cooperating_agents = range(4)
+    for iteration in range(1):
         print('iteration: %d' % (iteration + 1))
 
         fig = pyplot.figure(1)
@@ -590,6 +629,37 @@ def MultiAgentExample():
 
         # get tasks from image, accounting for joint memory
         joint_memory = list(itertools.chain.from_iterable(agents['memory']))
+        tasks = CreateTasks(image, corner)
+        tasks = [t for t in tasks if tuple(t[0]) not in joint_memory]
+
+        assignments = []
+        if len(tasks):
+            cost_matrix = np.zeros((len(cooperating_agents), len(tasks)))
+            for agent in cooperating_agents:
+                # cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
+                cost_matrix[agent, :] = -1*np.array([s[1]*np.exp(-1*np.linalg.norm(s[0]-agents['position'][agent, :], ord=2)) for s in tasks])
+
+            agent_idx, task_idx = spo.linear_sum_assignment(cost_matrix)
+            print(cost_matrix)
+            print(agent_idx)
+            print(task_idx)
+            print(cost_matrix[agent_idx, task_idx].sum())
+
+        # if len(agent_idx) < len(cooperating_agents):
+
+        # if len(tasks)<len(cooperating_agents):
+
+        #
+        # cost_matrix = np.zeros((len(cooperating_agents), len(tasks)))
+        # for agent in range(locations.shape[0]):
+        #     # cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
+        #     cost_matrix[agent, :] = -1 * np.array(
+        #         [s[1] * np.exp(-1 * np.linalg.norm(s[0] - locations[agent, :], ord=2)) for s in tasks])
+        #
+        # # print(np.around(cost_matrix, decimals=3))
+        #
+        # _, assignments = spo.linear_sum_assignment(cost_matrix)
+
         tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
                                               joint_memory, center)
 
@@ -629,8 +699,8 @@ if __name__ == "__main__":
 
     np.random.seed(42)
 
-    SingleAgentExample()
-    # MultiAgentExample()
+    # SingleAgentExample()
+    MultiAgentExample()
 
     # # centralized planner example
     # agents = {'position': None}
