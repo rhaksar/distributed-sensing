@@ -377,7 +377,7 @@ def CreateSoloPlan(tasks, initial_position):
     return actions, path
 
 
-def CreateJointPlan(tasks, assignments, initial_positions):
+def CreateJointPlan(assignments, initial_positions):
     actions = []
     path = []
 
@@ -402,7 +402,7 @@ def CreateJointPlan(tasks, assignments, initial_positions):
                 cost = 0
                 constraints = []
                 if t < T:
-                    cost = cvxpy.norm(x[2*ai:(2*ai+2), t+1]-tasks[assignments[ai]], p=2)
+                    cost = cvxpy.norm(x[2*ai:(2*ai+2), t+1]-assignments[ai], p=2)
                     constraints = [x[2*ai:(2*ai+2), t+1] == x[2*ai:(2*ai+2), t] + u[2*ai:(2*ai+2), t],
                                    cvxpy.norm(u[2*ai:(2*ai+2), t], p=2) <= 0.5]
 
@@ -422,7 +422,7 @@ def CreateJointPlan(tasks, assignments, initial_positions):
             # constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :],
             #                cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2) <= 0]
             constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :]]
-            cost = cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2)
+            cost = cvxpy.norm(x[2*ai:(2*ai+2), T]-assignments[ai], p=2)
             states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
 
         problem = cvxpy.sum(states)
@@ -485,7 +485,8 @@ def SingleAgentExample():
     for i in range(15):
         sim.step([])
 
-    folder = 'sim_images/single_agent/'
+    # folder = 'sim_images/single_agent/'
+    folder = 'sim_images/random/'
 
     for iteration in range(1):
         print('iteration: %d' %(iteration+1))
@@ -495,7 +496,7 @@ def SingleAgentExample():
         ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
         ax1.set_xlim(0, 25)
         ax1.set_ylim(0, 25)
-        ax1.plot(X_explore, Y_explore, linestyle='', Marker='.', Markersize=10, color='orange')
+        ax1.plot(X_explore, Y_explore, linestyle='', Marker='.', Markersize=5, color='orange')
 
         ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
 
@@ -564,7 +565,7 @@ def SingleAgentExample():
             agent_memory.append(tuple(np.around(path[0][:, -1], decimals=2)))
 
         # update exploration node if agent close enough
-        if mode == 'explore' and np.linalg.norm(agent_position-path[0][:, -1], ord=2)<0.01:
+        if mode == 'explore' and np.linalg.norm(agent_position-path[0][:, -1], ord=2)<0.5:
             t_explore[min_idx] = agent_time
             if np.any(image == 1):
                 W_explore[min_idx] = 1-1e-8
@@ -583,22 +584,46 @@ def SingleAgentExample():
         y0, y1 = ax2.get_ylim()
         ax2.set_aspect((x1-x0)/(y1-y0))
 
-        # filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
-        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+        filename = folder + 'iteration' + str(iteration+1).zfill(3) + '.png'
+        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
-        pyplot.show()
+        # pyplot.show()
         pyplot.close(fig)
 
 
 def MultiAgentExample():
-    agents = {'position': np.zeros((4, 2)), 'memory': [[], [], [], []]}
-    agents['position'][0, :] = np.array([6.75, 11.25])  # np.array([14.25, 16.25])
-    agents['position'][1, :] = np.array([7.75, 10.75])  # np.array([15.75, 15.75])
-    agents['position'][2, :] = np.array([7.25, 10.75])  # np.array([16.75, 14.25])
-    agents['position'][3, :] = np.array([6.25, 10.75])
+    num_agents = 4
+    agents = {'position': np.zeros((num_agents, 2)), 'memory': [[], [], [], []],
+              'mode': ['explore']*num_agents}
+    # agents['position'][0, :] = np.array([6.75, 11.25])  # np.array([14.25, 16.25])
+    # agents['position'][1, :] = np.array([7.75, 10.75])  # np.array([15.75, 15.75])
+    # agents['position'][2, :] = np.array([7.25, 10.75])  # np.array([16.75, 14.25])
+    # agents['position'][3, :] = np.array([6.25, 10.75])
+
+    agents['position'][0, :] = np.array([0.75, 0.75])
+    agents['position'][1, :] = np.array([0.75, 1.25])
+    agents['position'][2, :] = np.array([1.25, 0.75])
+    agents['position'][3, :] = np.array([0.25, 0.75])
+
+    x_explore = np.linspace(2.5, 22.5, 11, endpoint=True) - 0.25
+    y_explore = np.linspace(2.5, 22.5, 11, endpoint=True) - 0.25
+    num_explore = len(x_explore)*len(y_explore)
+    X_explore, Y_explore = np.meshgrid(x_explore, y_explore)
+
+    d = np.maximum(np.abs(X_explore - 12.25), np.abs(Y_explore - 12.25))
+    # d = (X_explore-12.25)**2 + (Y_explore-12.25)**2
+    d /= np.amax(d)
+
+    agents['W_explore'] = np.zeros((X_explore.shape[0], X_explore.shape[1], num_agents))
+    agents['W_explore'][:, :, :] = np.expand_dims(0.5*np.ones_like(X_explore) - 0.2*d, axis=2)
+    agents['t_explore'] = np.zeros_like(agents['W_explore'])
+    m, n, _ = agents['W_explore'].shape
+    I, J = np.ogrid[:m, :n]
+
+    agents['time'] = np.zeros(num_agents)
 
     grid_size = 50
-    center = np.array([12.5, 12.5])
+    # center = np.array([12.5, 12.5])
     sim = FireSimulator(grid_size)
 
     for i in range(15):
@@ -607,7 +632,7 @@ def MultiAgentExample():
     folder = 'sim_images/multi_agent/'
 
     cooperating_agents = range(4)
-    for iteration in range(1):
+    for iteration in range(10):
         print('iteration: %d' % (iteration + 1))
 
         fig = pyplot.figure(1)
@@ -615,6 +640,8 @@ def MultiAgentExample():
         ax1.set_xlim(0, 25)
         ax1.set_ylim(0, 25)
         ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
+
+        ax1.plot(X_explore, Y_explore, linestyle='', Marker='.', Markersize=5, color='orange')
 
         # plot forest and agent positions
         ax1 = PlotForest(sim.state, ax1)
@@ -627,29 +654,51 @@ def MultiAgentExample():
         ax2.plot(agents['position'][cooperating_agents, 0], agents['position'][cooperating_agents, 1],
                  linestyle='', Marker='.', MarkerSize=10, color='blue')
 
+        # update exploration values from shared maps
+        latest_times = agents['t_explore'].max(axis=2)
+        latest_times_idx = agents['t_explore'].argmax(axis=2)
+        latest_weights = agents['W_explore'][I, J, latest_times_idx]
+        agents['W_explore'][:, :, :] = np.expand_dims(latest_weights, axis=2)
+        agents['t_explore'][:, :, :] = np.expand_dims(latest_times, axis=2)
+
         # get tasks from image, accounting for joint memory
         joint_memory = list(itertools.chain.from_iterable(agents['memory']))
         tasks = CreateTasks(image, corner)
         tasks = [t for t in tasks if tuple(t[0]) not in joint_memory]
 
-        assignments = []
+        assignments = {}
         if len(tasks):
             cost_matrix = np.zeros((len(cooperating_agents), len(tasks)))
-            for agent in cooperating_agents:
-                # cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
-                cost_matrix[agent, :] = -1*np.array([s[1]*np.exp(-1*np.linalg.norm(s[0]-agents['position'][agent, :], ord=2)) for s in tasks])
+            for a in cooperating_agents:
+                # cost_matrix[a, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[a, :], ord=2) for s in tasks])
+                cost_matrix[a, :] = -1*np.array([s[1]*np.exp(-1*np.linalg.norm(s[0]-agents['position'][a, :], ord=2)) for s in tasks])
 
             agent_idx, task_idx = spo.linear_sum_assignment(cost_matrix)
-            print(cost_matrix)
-            print(agent_idx)
-            print(task_idx)
-            print(cost_matrix[agent_idx, task_idx].sum())
 
-        # if len(agent_idx) < len(cooperating_agents):
+            for a, t in zip(agent_idx, task_idx):
+                assignments[a] = tasks[t][0]
+                agents['mode'][a] = 'control'
 
-        # if len(tasks)<len(cooperating_agents):
+        if len(assignments.keys()) < len(cooperating_agents):
+            W_explore = agents['W_explore'][:, :, 0]
+            entropy = W_explore*np.log(W_explore) + (1-W_explore)*np.log(1-W_explore)
+            exploration_agents = [a for a in cooperating_agents if a not in assignments.keys()]
+            cost_matrix = np.zeros((len(exploration_agents), num_explore))
+            for i, a in enumerate(exploration_agents):
+                distances = np.maximum(np.abs(X_explore-agents['position'][a, 0]),
+                                       np.abs(Y_explore-agents['position'][a, 1]))
+                scores = entropy*(1/(distances+1e-5))
+                cost_matrix[i, :] = scores.reshape(num_explore)
 
-        #
+            pos_idx_dict = {}
+            agent_idx, task_idx = spo.linear_sum_assignment(cost_matrix)
+            for a_idx, t_idx in zip(agent_idx, task_idx):
+                agent = exploration_agents[a_idx]
+                pos_idx = np.unravel_index(t_idx, W_explore.shape)
+                pos_idx_dict[agent] = pos_idx
+                assignments[agent] = np.array([X_explore[pos_idx], Y_explore[pos_idx]])
+                agents['mode'][agent] = 'explore'
+
         # cost_matrix = np.zeros((len(cooperating_agents), len(tasks)))
         # for agent in range(locations.shape[0]):
         #     # cost_matrix[agent, :] = -1*np.array([s[1]-np.linalg.norm(s[0]-locations[agent, :], ord=2) for s in tasks])
@@ -660,11 +709,11 @@ def MultiAgentExample():
         #
         # _, assignments = spo.linear_sum_assignment(cost_matrix)
 
-        tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
-                                              joint_memory, center)
+        # tasks, assignments = CreateJointTasks(image, corner, agents['position'][cooperating_agents, :],
+        #                                       joint_memory, center)
 
         # solve convex program for paths and determine completed tasks
-        _, paths = CreateJointPlan(tasks, assignments, agents['position'][cooperating_agents, :])
+        _, paths = CreateJointPlan(assignments, agents['position'][cooperating_agents, :])
         completed = []
         for idx, a in enumerate(cooperating_agents):
             ax2.plot(paths[0][2*idx, :], paths[0][2*idx+1, :], Marker='.', MarkerSize=10, color='white')
@@ -672,8 +721,27 @@ def MultiAgentExample():
 
             # update position by taking first action
             agents['position'][a, :] = paths[0][2*idx:(2*idx+2), 1]
-            if np.linalg.norm(paths[0][2*idx:(2*idx+2), -1]-agents['position'][a, :], ord=2) <= 0.01:
-                completed.append(np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2))
+            distance_to_task = np.linalg.norm(paths[0][2*idx:(2*idx+2), -1]-agents['position'][a, :], ord=2)
+            if agents['mode'][a] == 'control' and distance_to_task <= 0.01:
+                completed.append(tuple(np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2)))
+
+                distances = np.maximum(np.abs(X_explore - agents['position'][a, 0]),
+                                       np.abs(Y_explore - agents['position'][a, 1]))
+                close_pos = np.where(distances <= 1.5)
+                if len(close_pos[0]):
+                    for r, c in zip(close_pos[0], close_pos[1]):
+                        agents['t_explore'][r, c, a] = agents['time'][a]
+                        agents['W_explore'][r, c, a] = 1-1e-8
+
+            elif agents['mode'][a] == 'explore' and distance_to_task <= 0.01:
+                pos_idx = pos_idx_dict[a]
+                agents['t_explore'][pos_idx[0], pos_idx[1], a] = agents['time'][a]
+                image, corner = CreateSoloImage(sim.state, agents['position'][a, :]-0.25, (5, 5))
+
+                if np.any(image == 1):
+                    agents['W_explore'][pos_idx[0], pos_idx[1], a] = 1-1e-8
+                else:
+                    agents['W_explore'][pos_idx[0], pos_idx[1], a] = 0+1e-8
 
         # add completed tasks to memory and retain tasks still in view
         # completed = [np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2) for idx in range(len(cooperating_agents))]
@@ -683,6 +751,8 @@ def MultiAgentExample():
             agents['memory'][a] = [m for m in agents['memory'][a]
                                    if -5/4 <= m[0]-agents['position'][a, 0] <= 5/4 and
                                       -5/4 <= m[1]-agents['position'][a, 1] <= 5/4]
+
+        agents['time'] += 1
 
         x0, x1 = ax2.get_xlim()
         y0, y1 = ax2.get_ylim()
