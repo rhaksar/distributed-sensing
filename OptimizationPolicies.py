@@ -104,12 +104,12 @@ def xy_to_rc(y_limit, xy):
 
 
 '''
-Create a slice of the forest state, padded with -2 if out of bounds
+Create a slice of the forest state, padded with 0 if out of bounds
 Image is centered at "position"
 '''
 def CreateSoloImage(state, position, dim):
     r0, c0 = xy_to_rc(state.shape[0], position)
-    image = -2*np.ones(dim).astype(np.int8)
+    image = np.zeros(dim).astype(np.int8)
 
     half_row = (dim[0]-1)//2
     half_col = (dim[1]-1)//2
@@ -636,7 +636,7 @@ def MultiAgentExample():
 
     folder = 'sim_images/multi_agent/'
 
-    cooperating_agents = range(4)
+    cooperating_agents = [0, 1]
     for iteration in range(3):
         print('iteration: %d' % (iteration + 1))
 
@@ -915,6 +915,9 @@ class Policy(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers)
         self.fc = nn.Linear(hidden_size, output_size)
 
+        self.saved_log_probs = {}
+        self.rewards = {}
+
     def forward(self, x):
         # Set initial states
         h0 = Variable(torch.zeros(self.num_layers, x.size(1), self.hidden_size))
@@ -930,6 +933,14 @@ class Policy(nn.Module):
         return F.softmax(out, dim=1)
 
 
+def Reward():
+    pass
+
+
+def FinishEpisode():
+    pass
+
+
 if __name__ == "__main__":
 
     np.random.seed(42)
@@ -938,14 +949,58 @@ if __name__ == "__main__":
     # MultiAgentExample()
 
     input_size = 29
-    seq_len = 100
-    batch_size = 1
+    policy = Policy(input_size=input_size)
+    optimizer = optim.Adam(policy.parameters(), lr=1e-2)
+    eps = np.finfo(np.float32).eps.item()
 
-    p = Policy(input_size=input_size)
-    input_seq = Variable(torch.randn(seq_len, batch_size, input_size))
-    output_seq = p(input_seq)
-    print(output_seq)
-    print(output_seq.size())
+    grid_size = 50
+    num_agents = 10
+    num_episodes = 1
+
+    max_comm_dist = 4
+
+    x_explore = np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
+    y_explore = np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
+    num_explore = len(x_explore)*len(y_explore)
+    X_explore, Y_explore = np.meshgrid(x_explore, y_explore)
+
+    d = np.maximum(np.abs(X_explore - 12.25), np.abs(Y_explore - 12.25))
+    d /= np.amax(d)
+
+    w_init = np.expand_dims(0.5*np.ones_like(X_explore) - 0.2*d, axis=2)
+    t_init = np.zeros_like(w_init)
+    m, n, _ = w_init.shape
+    I, J = np.ogrid[:m, :n]
+
+    for ith_episode in range(num_episodes):
+
+        sim_control = []
+        agents = {'positions': None, 'memory': [[]]*num_agents, 'mode': ['explore']*num_agents,
+                  'w_explore': w_init, 't_explore': t_init, 'time': np.zeros(num_agents),
+                  'features': np.zeros((input_size, 5, num_agents)), 'capacity': 10*np.ones(num_agents)}
+        for a in range(num_agents):
+            policy.rewards[a] = []
+            policy.saved_log_probs[a] = []
+        sim = FireSimulator(grid_size)
+
+        # run each forest fire simulation for a maximum of 250 agent actions
+        for sim_iter in range(250):
+            # update simulation every 5 agent actions
+            if (sim_iter+1) % 5 == 0:
+                sim.step(sim_control, dbeta=0.54)
+                sim_control = []
+
+            if sim.end or sim.early_end:
+                print('Fire simulation terminated')
+                print(sim.stats)
+                break
+
+            # dispatch agents in first few simulation iterations
+            agents['positions'] = Dispatch(agents['positions'], sim_iter)
+
+            # determine communication clusters
+            Z = spc.hierarchy.linkage(agents['positions'], method='ward')
+            clusters = spc.hierarchy.fcluster(Z, max_comm_dist, criterion='distance')
 
     print('done')
 
