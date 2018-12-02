@@ -18,8 +18,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
 
+from torch.autograd import Variable
+from torch.distributions import Categorical
 
 def PlotForest(state, axis):
     # fig = pyplot.figure()
@@ -403,32 +404,33 @@ def CreateJointPlan(assignments, initial_positions):
         x = cvxpy.Variable((2*num_agents, T+1))
         u = cvxpy.Variable((2*num_agents, T))
 
-        for ai in range(num_agents):
+        for idx, ai in enumerate(assignments.keys()):
             for t in range(T+1):
                 cost = 0
                 constraints = []
                 if t < T:
-                    cost = cvxpy.norm(x[2*ai:(2*ai+2), t+1]-assignments[ai], p=2)
-                    constraints = [x[2*ai:(2*ai+2), t+1] == x[2*ai:(2*ai+2), t] + u[2*ai:(2*ai+2), t],
-                                   cvxpy.norm(u[2*ai:(2*ai+2), t], p=2) <= 0.5]
+                    cost = cvxpy.norm(x[2*idx:(2*idx+2), t+1]-assignments[ai], p=2)
+                    constraints = [x[2*idx:(2*idx+2), t+1] == x[2*idx:(2*idx+2), t] + u[2*idx:(2*idx+2), t],
+                                   cvxpy.norm(u[2*idx:(2*idx+2), t], p=2) <= 0.5]
 
                 # collision avoidance constraint for time interval [1, T]
-                if t > 0 and ai < num_agents-1:
-                    for aj in np.arange(ai+1, num_agents, 1):
-                        xi = nominal_paths[2*ai:(2*ai+2), t]
-                        xj = nominal_paths[2*aj:(2*aj+2), t]
+                if t > 0 and idx < num_agents-1:
+                    for idx_j in np.arange(idx+1, num_agents, 1):
+                        xi = nominal_paths[2*idx:(2*idx+2), t]
+                        xj = nominal_paths[2*idx_j:(2*idx_j+2), t]
                         x_diff = xj-xi
                         x_diff_norm = np.linalg.norm(x_diff, ord=2)
                         if x_diff_norm <= 2*safe_radius:
-                            constraints.append(x_diff[0]*(x[2*aj, t]-x[2*ai, t]) + x_diff[1]*(x[2*aj+1, t]-x[2*ai+1, t])
+                            constraints.append(x_diff[0]*(x[2*idx_j, t]-x[2*idx, t]) +
+                                               x_diff[1]*(x[2*idx_j+1, t]-x[2*idx+1, t])
                                                >= safe_radius*x_diff_norm)
 
                 states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
 
             # constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :],
             #                cvxpy.norm(x[2*ai:(2*ai+2), T]-tasks[assignments[ai]], p=2) <= 0]
-            constraints = [x[2*ai:(2*ai+2), 0] == x0[ai, :]]
-            cost = cvxpy.norm(x[2*ai:(2*ai+2), T]-assignments[ai], p=2)
+            constraints = [x[2*idx:(2*idx+2), 0] == x0[idx, :]]
+            cost = cvxpy.norm(x[2*idx:(2*idx+2), T]-assignments[ai], p=2)
             states.append(cvxpy.Problem(cvxpy.Minimize(cost), constraints))
 
         problem = cvxpy.sum(states)
@@ -667,7 +669,9 @@ def MultiAgentExample():
         agents['t_explore'][:, :, cooperating_agents] = np.expand_dims(latest_times, axis=2)
 
         # get tasks from image, accounting for joint memory
-        joint_memory = list(itertools.chain.from_iterable(agents['memory']))
+        joint_memory = list(itertools.chain.from_iterable([m for a, m in enumerate(agents['memory'])
+                                                           if a in cooperating_agents]))
+        # joint_memory = list(itertools.chain.from_iterable(agents['memory']))
         tasks = CreateTasks(image, corner)
         tasks = [t for t in tasks if tuple(t[0]) not in joint_memory]
 
@@ -686,7 +690,7 @@ def MultiAgentExample():
                 agents['mode'][a] = 'control'
 
         if len(assignments.keys()) < len(cooperating_agents):
-            W_explore = agents['W_explore'][:, :, 0]
+            W_explore = agents['W_explore'][:, :, cooperating_agents[0]]
             entropy = W_explore*np.log(W_explore) + (1-W_explore)*np.log(1-W_explore)
             exploration_agents = [a for a in cooperating_agents if a not in assignments.keys()]
             cost_matrix = np.zeros((len(exploration_agents), num_explore))
@@ -919,6 +923,8 @@ class Policy(nn.Module):
         self.rewards = {}
 
     def forward(self, x):
+        # input dimensions should be (sequence_length, batch, input_size)
+
         # Set initial states
         h0 = Variable(torch.zeros(self.num_layers, x.size(1), self.hidden_size))
         c0 = Variable(torch.zeros(self.num_layers, x.size(1), self.hidden_size))
@@ -931,6 +937,15 @@ class Policy(nn.Module):
 
         # Return output as probabilities [don't communicate, do communicate]
         return F.softmax(out, dim=1)
+
+
+def SelectAction(features, agent):
+    features = torch.from_numpy(features).float().unsqueeze(1)
+    probs = policy(features)
+    m = Categorical(probs)
+    action = m.sample()
+    policy.saved_log_probs[agent].append(m.log_prob(action))
+    return action.item()
 
 
 def Reward():
@@ -948,7 +963,7 @@ if __name__ == "__main__":
     # SingleAgentExample()
     # MultiAgentExample()
 
-    input_size = 29
+    input_size = 28
     policy = Policy(input_size=input_size)
     optimizer = optim.Adam(policy.parameters(), lr=1e-2)
     eps = np.finfo(np.float32).eps.item()
@@ -967,7 +982,8 @@ if __name__ == "__main__":
     d = np.maximum(np.abs(X_explore - 12.25), np.abs(Y_explore - 12.25))
     d /= np.amax(d)
 
-    w_init = np.expand_dims(0.5*np.ones_like(X_explore) - 0.2*d, axis=2)
+    w_init = np.zeros((X_explore.shape[0], X_explore.shape[1], num_agents))
+    w_init[:, :, :] = np.expand_dims(0.5*np.ones_like(X_explore)-0.2*d, axis=2)
     t_init = np.zeros_like(w_init)
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
@@ -977,16 +993,18 @@ if __name__ == "__main__":
         sim_control = []
         agents = {'positions': None, 'memory': [[]]*num_agents, 'mode': ['explore']*num_agents,
                   'w_explore': w_init, 't_explore': t_init, 'time': np.zeros(num_agents),
-                  'features': np.zeros((input_size, 5, num_agents)), 'capacity': 10*np.ones(num_agents)}
+                  'features': np.zeros((5, input_size, num_agents)), 'capacity': 10*np.ones(num_agents),
+                  'image_corners': np.zeros((num_agents, 2)), 'comm_choices': np.zeros(num_agents)}
         for a in range(num_agents):
             policy.rewards[a] = []
             policy.saved_log_probs[a] = []
+
         sim = FireSimulator(grid_size)
 
         # run each forest fire simulation for a maximum of 250 agent actions
-        for sim_iter in range(250):
+        for agent_iter in range(10):
             # update simulation every 5 agent actions
-            if (sim_iter+1) % 5 == 0:
+            if (agent_iter+1) % 5 == 0:
                 sim.step(sim_control, dbeta=0.54)
                 sim_control = []
 
@@ -996,11 +1014,226 @@ if __name__ == "__main__":
                 break
 
             # dispatch agents in first few simulation iterations
-            agents['positions'] = Dispatch(agents['positions'], sim_iter)
+            agents['positions'] = Dispatch(agents['positions'], agent_iter)
+
+            current_num_agents = agents['positions'].shape[0]
 
             # determine communication clusters
             Z = spc.hierarchy.linkage(agents['positions'], method='ward')
             clusters = spc.hierarchy.fcluster(Z, max_comm_dist, criterion='distance')
+
+            # use policy to determine if each agent wants to communicate within their cluster
+            for a in range(current_num_agents):
+                image, corner = CreateSoloImage(sim.state, agents['positions'][a, :]-0.25, (5, 5))
+                agents['image_corners'][a, :] = corner
+
+                agents['features'][:4, :, a] = agents['features'][1:, :, a]
+                agents['features'][4, :, a] = np.zeros(input_size)
+
+                # image feature
+                agents['features'][4, 3:, a] = image.reshape(25)
+
+                # cluster size feature
+                cluster_id = clusters[a]
+                cluster_size = len([c_id for c_id in clusters if c_id == cluster_id])
+                agents['features'][4, 0, a] = cluster_size
+
+                # is_fire feature
+                amount_fire = len(np.where(image == 1)[0])
+                agents['features'][4, 1, a] = 1 if amount_fire > 0 else 0
+
+                # fraction of fire feature
+                agents['features'][4, 2, a] = amount_fire / 25
+
+                comm_choice = SelectAction(agents['features'][:, :, a], a)
+                agents['comm_choices'][a] = comm_choice
+
+            clusters = [clusters[a] if agents['comm_choices'][a] == 1 else -1 for a in range(current_num_agents)]
+
+            # perform single agent or multi-agent planning based on communication choices
+
+            # first perform single agent planning for agents that do not communicate and
+            # for agents that are in size 1 clusters
+            for a in range(current_num_agents):
+                cluster_size = len([c_id for c_id in clusters if c_id == clusters[a] and c_id != -1])
+                # skip multi-agent planning for now
+                if cluster_size > 1:
+                    continue
+
+                # create tasks accounting for memory
+                image = agents['features'][4, 3:, a].reshape((5, 5))
+                tasks = CreateTasks(image, agents['image_corners'][a, :])
+                tasks = [t for t in tasks if tuple(t[0]) not in agents['memory'][a]]
+
+                tasks_ordered = []
+                min_idx = None
+                if not len(tasks):
+                    # explore
+                    entropy = agents['w_explore'][:, :, a]*np.log(agents['w_explore'][:, :, a]) + \
+                              (1-agents['w_explore'][:, :, a])*np.log(1-agents['w_explore'][:, :, a])
+
+                    distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
+                                           np.abs(Y_explore - agents['positions'][a, 1]))
+                    scores = entropy * (1 / (distances + 1e-5))
+                    min_idx = np.unravel_index(np.argmin(scores), scores.shape)
+
+                    tasks_ordered = [np.array([X_explore[min_idx], Y_explore[min_idx]])]
+                    mode = 'explore'
+                else:
+                    # order control tasks
+                    for i in range(len(tasks)):
+                        if i == 0:
+                            p = agents['positions'][a, :]
+                        else:
+                            p = tasks_ordered[-1][0]
+
+                        tasks.sort(key=lambda s: s[1]*np.exp(-4*np.linalg.norm(s[0]-p, ord=2)), reverse=True)
+                        # tasks.sort(key=lambda s: s[1]/(np.linalg.norm(s[0]-p, ord=1) + 1e-10), reverse=True)
+                        tasks_ordered.append(tasks[0])
+                        tasks = tasks[1:]
+
+                    tasks_ordered = [t[0] for t in tasks_ordered]
+                    mode = 'control'
+
+                # solve convex program to generate path
+                _, path = CreateSoloPlan(tasks_ordered, agents['positions'][a, :])
+                agents['positions'][a, :] = path[0][:, 1]
+
+                # add control task to memory if agent completed task
+                dist_to_task = np.linalg.norm(agents['positions'][a, :] - path[0][:, -1], ord=2)
+                if mode == 'control' and dist_to_task < 0.01:
+                    agents['memory'][a].append(tuple(np.around(path[0][:, -1], decimals=2)))
+
+                    r, c = xy_to_rc(grid_size, agents['positions'][a, :]-0.25)
+                    if tuple((r, c)) not in sim_control:
+                        sim_control.append(tuple((r, c)))
+
+                    distances = np.maximum(np.abs(X_explore - agents['position'][a, 0]),
+                                           np.abs(Y_explore - agents['position'][a, 1]))
+                    close_pos = np.where(distances <= 1.5)
+                    if len(close_pos[0]):
+                        for r, c in zip(close_pos[0], close_pos[1]):
+                            agents['t_explore'][r, c, a] = agents['time'][a]
+                            agents['W_explore'][r, c, a] = 1 - 1e-8
+
+                # update exploration node if agent close enough
+                if mode == 'explore' and dist_to_task < 0.01:
+                    agents['t_explore'][min_idx[0], min_idx[1], a] = agents['time'][a]
+                    if np.any(image == 1):
+                        agents['w_explore'][min_idx[0], min_idx[1], a] = 1 - 1e-8
+                    else:
+                        agents['w_explore'][min_idx[0], min_idx[1], a] = 0 + 1e-8
+
+                # retain control tasks still in view
+                agent_memory = [m for m in agents['memory'][a]
+                                if -5/4 <= m[0]-agents['positions'][a, :][0] <= 5/4 and
+                                   -5/4 <= m[1]-agents['positions'][a, :][1] <= 5/4]
+
+            # perform multi-agent planning for clusters
+            for cluster_id in range(len(clusters)):
+                cluster_size = len([c_id for c_id in clusters if c_id == cluster_id])
+                if cluster_size < 2:
+                    continue
+
+                cooperating_agents = [a for a in range(current_num_agents) if clusters[a] == cluster_id]
+
+                image, corner = CreateJointImage(sim.state, agents['positions'][cooperating_agents, :]-0.25, (5, 5))
+
+                # update exploration values from shared maps
+                latest_times = agents['t_explore'][:, :, cooperating_agents].max(axis=2)
+                latest_times_idx = agents['t_explore'][:, :, cooperating_agents].argmax(axis=2)
+                latest_weights = agents['w_explore'][I, J, latest_times_idx]
+                agents['w_explore'][:, :, cooperating_agents] = np.expand_dims(latest_weights, axis=2)
+                agents['t_explore'][:, :, cooperating_agents] = np.expand_dims(latest_times, axis=2)
+
+                # get tasks from image, accounting for joint memory
+                joint_memory = list(itertools.chain.from_iterable([m for a, m in enumerate(agents['memory'])
+                                                                   if a in cooperating_agents]))
+                tasks = CreateTasks(image, corner)
+                tasks = [t for t in tasks if tuple(t[0]) not in joint_memory]
+
+                # assign as many control tasks as possible
+                assignments = {}
+                if len(tasks):
+                    cost_matrix = np.zeros((len(cooperating_agents), len(tasks)))
+                    for a in cooperating_agents:
+                        cost_matrix[a, :] = [-1*s[1]*np.exp(-1*np.linalg.norm(s[0]-agents['positions'][a, :], ord=2))
+                                             for s in tasks]
+
+                    agent_idx, task_idx = spo.linear_sum_assignment(cost_matrix)
+
+                    for a, t in zip(agent_idx, task_idx):
+                        assignments[a] = tasks[t][0]
+                        agents['mode'][a] = 'control'
+
+                # remaining agents are assigned to explore
+                if len(assignments.keys()) < len(cooperating_agents):
+                    W_explore = agents['w_explore'][:, :, cooperating_agents[0]]
+                    entropy = W_explore*np.log(W_explore)+(1-W_explore)*np.log(1-W_explore)
+                    exploration_agents = [a for a in cooperating_agents if a not in assignments.keys()]
+                    cost_matrix = np.zeros((len(exploration_agents), num_explore))
+                    for i, a in enumerate(exploration_agents):
+                        distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
+                                               np.abs(Y_explore - agents['positions'][a, 1]))
+                        scores = entropy*(1/(distances+1e-5))
+                        cost_matrix[i, :] = scores.reshape(num_explore)
+
+                    pos_idx_dict = {}
+                    agent_idx, task_idx = spo.linear_sum_assignment(cost_matrix)
+                    for a_idx, t_idx in zip(agent_idx, task_idx):
+                        a = exploration_agents[a_idx]
+                        pos_idx = np.unravel_index(t_idx, W_explore.shape)
+                        pos_idx_dict[a] = pos_idx
+                        assignments[a] = np.array([X_explore[pos_idx], Y_explore[pos_idx]])
+                        agents['mode'][a] = 'explore'
+
+                # solve convex program for paths and determine completed tasks
+                _, paths = CreateJointPlan(assignments, agents['positions'][cooperating_agents, :])
+                completed = []
+                for idx, a in enumerate(cooperating_agents):
+                    # update position by taking first action
+                    agents['positions'][a, :] = paths[0][2*idx:(2*idx+2), 1]
+                    distance_to_task = np.linalg.norm(paths[0][2*idx:(2*idx+2), -1]-agents['positions'][a, :], ord=2)
+                    if agents['mode'][a] == 'control' and distance_to_task <= 0.01:
+                        completed.append(tuple(np.around(paths[0][2*idx:(2*idx+2), -1], decimals=2)))
+
+                        r, c = xy_to_rc(grid_size, paths[0][2*idx:(2*idx+2), -1]-0.25)
+                        if tuple((r, c)) not in sim_control:
+                            sim_control.append(tuple((r, c)))
+
+                        distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
+                                               np.abs(Y_explore - agents['positions'][a, 1]))
+                        close_pos = np.where(distances <= 1.5)
+                        if len(close_pos[0]):
+                            for r, c in zip(close_pos[0], close_pos[1]):
+                                agents['t_explore'][r, c, a] = agents['time'][a]
+                                agents['w_explore'][r, c, a] = 1 - 1e-8
+
+                    elif agents['mode'][a] == 'explore' and distance_to_task <= 0.01:
+                        pos_idx = pos_idx_dict[a]
+                        agents['t_explore'][pos_idx[0], pos_idx[1], a] = agents['time'][a]
+                        image = agents['features'][4, 3:, a].reshape((5, 5))
+                        # image, corner = CreateSoloImage(sim.state, agents['position'][a, :]-0.25, (5, 5))
+
+                        if np.any(image == 1):
+                            agents['w_explore'][pos_idx[0], pos_idx[1], a] = 1 - 1e-8
+                        else:
+                            agents['w_explore'][pos_idx[0], pos_idx[1], a] = 0 + 1e-8
+
+                # add completed tasks to memory and retain tasks still in view
+                for a in cooperating_agents:
+                    agents['memory'][a].extend(completed)
+
+                    agents['memory'][a] = [m for m in agents['memory'][a]
+                                           if -5/4 <= m[0]-agents['positions'][a, 0] <= 5/4 and
+                                              -5/4 <= m[1]-agents['positions'][a, 1] <= 5/4]
+
+            # determine reward for each agent
+
+            agents['time'] += 1
+
+        # incorporate feedback from agents at end of simulation
+        FinishEpisode()
 
     print('done')
 
