@@ -666,7 +666,7 @@ def MultiAgentExample():
         # update exploration values from shared maps
         latest_times = agents['t_explore'][:, :, cooperating_agents].max(axis=2)
         latest_times_idx = agents['t_explore'][:, :, cooperating_agents].argmax(axis=2)
-        latest_weights = agents['W_explore'][I, J, latest_times_idx]
+        latest_weights = agents['W_explore'][:, :, cooperating_agents][I, J, latest_times_idx]
         agents['W_explore'][:, :, cooperating_agents] = np.expand_dims(latest_weights, axis=2)
         agents['t_explore'][:, :, cooperating_agents] = np.expand_dims(latest_times, axis=2)
 
@@ -1253,14 +1253,17 @@ if __name__ == "__main__":
                 cooperating_agents = [a for a in range(current_num_agents) if clusters[a] == cluster_id]
                 cooperating_agents.sort()
 
-                print('cooperating agents: {}'.format(cooperating_agents))
+                # if agent_iter>=16 and 5 in cooperating_agents:
+                #     print('pause here')
+
+                # print('cooperating agents: {}'.format(cooperating_agents))
 
                 image, corner = CreateJointImage(sim.state, agents['positions'][cooperating_agents, :]-0.25, (5, 5))
 
                 # update exploration values from shared maps
                 latest_times = agents['t_explore'][:, :, cooperating_agents].max(axis=2)
                 latest_times_idx = agents['t_explore'][:, :, cooperating_agents].argmax(axis=2)
-                latest_weights = agents['w_explore'][I, J, latest_times_idx]
+                latest_weights = agents['w_explore'][:, :, cooperating_agents][I, J, latest_times_idx]
                 agents['w_explore'][:, :, cooperating_agents] = np.expand_dims(latest_weights, axis=2)
                 agents['t_explore'][:, :, cooperating_agents] = np.expand_dims(latest_times, axis=2)
 
@@ -1289,8 +1292,8 @@ if __name__ == "__main__":
                 pos_idx_dict = {}
                 if len(assignments.keys()) < len(cooperating_agents):
                     W_explore = agents['w_explore'][:, :, cooperating_agents[0]]
-                    print('exploration weights:')
-                    print(W_explore)
+                    # print('exploration weights:')
+                    # print(np.around(W_explore, decimals=2))
 
                     entropy = W_explore*np.log(W_explore)+(1-W_explore)*np.log(1-W_explore)
                     exploration_agents = [a for a in cooperating_agents if a not in assignments.keys()]
@@ -1350,8 +1353,12 @@ if __name__ == "__main__":
 
                         if np.any(image == 1):
                             agents['w_explore'][pos_idx[0], pos_idx[1], a] = 1 - 1e-8
+                            # print('agent {} updated task ({}, {}) / ({}, {}) to 1-eps'.format(a, X_explore[pos_idx], Y_explore[pos_idx], pos_idx[0], pos_idx[1]))
                         else:
                             agents['w_explore'][pos_idx[0], pos_idx[1], a] = 0 + 1e-8
+                            # print('agent {} updated task ({}, {}) / ({}, {}) to 0+eps'.format(a, X_explore[pos_idx], Y_explore[pos_idx], pos_idx[0], pos_idx[1]))
+
+                        print(np.around(agents['t_explore'][:, :, a], decimals=2))
 
                 # add completed tasks to memory and retain tasks still in view
                 for a in cooperating_agents:
@@ -1385,9 +1392,9 @@ if __name__ == "__main__":
                 print(agents['reward'])
                 print()
 
-                # ax.figure.canvas.draw()
-                # filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
-                # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+                ax.figure.canvas.draw()
+                filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
+                pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
             t1 = time.time()
             loop_time += t1-t0
