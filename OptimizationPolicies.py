@@ -3,10 +3,12 @@ from FireSimulator import FireSimulator
 import copy
 import cvxpy
 import itertools
+import glob
 # import matplotlib.collections as clt
 import matplotlib.patches as patches
 import matplotlib.pyplot as pyplot
 import numpy as np
+import os
 import scipy.cluster as spc
 import scipy.optimize as spo
 import time
@@ -986,7 +988,7 @@ if __name__ == "__main__":
     grid_size = 50
     num_agents = 10
 
-    num_episodes = 3
+    num_episodes = 5
     num_agent_actions = 250
 
     max_comm_dist = 4
@@ -1005,19 +1007,23 @@ if __name__ == "__main__":
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    method = 'viz'
-    load_network = True
+    method = 'train'
+    load_network = False
 
     saved_network_episodes = 0
     if load_network:
-        filename = 'REINFORCE/' + 'REINFORCE-03-Dec-2018-1733.pth.tar'
+        filename = 'latest'  # filename = 'REINFORCE/' + 'REINFORCE-03-Dec-2018-2053.pth.tar'
+
+        if filename == 'latest':
+            filename = max(glob.iglob('REINFORCE/*.pth.tar'), key=os.path.getctime)
 
         load_data = torch.load(filename)
         policy.load_state_dict(load_data['state_dict'])
         optimizer.load_state_dict(load_data['optimizer'])
         saved_network_episodes += load_data['training_episodes']
 
-        print('loaded a network from file [previously trained for {} episodes]'.format(saved_network_episodes))
+        print('loaded a network [{}] from file [previously trained for {} episodes]'.format(filename,
+                                                                                            saved_network_episodes))
 
     if method == 'viz':
         num_episodes = 1
@@ -1145,7 +1151,7 @@ if __name__ == "__main__":
                 agents['comm_choices'][a] = comm_choice
 
                 if comm_choice == 1:
-                    agents['reward'][a] += -0.1
+                    # agents['reward'][a] += -0.1
                     if cluster_size == 0:
                         agents['reward'][a] += -0.5
 
@@ -1253,11 +1259,6 @@ if __name__ == "__main__":
                 cooperating_agents = [a for a in range(current_num_agents) if clusters[a] == cluster_id]
                 cooperating_agents.sort()
 
-                # if agent_iter>=16 and 5 in cooperating_agents:
-                #     print('pause here')
-
-                # print('cooperating agents: {}'.format(cooperating_agents))
-
                 image, corner = CreateJointImage(sim.state, agents['positions'][cooperating_agents, :]-0.25, (5, 5))
 
                 # update exploration values from shared maps
@@ -1292,8 +1293,6 @@ if __name__ == "__main__":
                 pos_idx_dict = {}
                 if len(assignments.keys()) < len(cooperating_agents):
                     W_explore = agents['w_explore'][:, :, cooperating_agents[0]]
-                    # print('exploration weights:')
-                    # print(np.around(W_explore, decimals=2))
 
                     entropy = W_explore*np.log(W_explore)+(1-W_explore)*np.log(1-W_explore)
                     exploration_agents = [a for a in cooperating_agents if a not in assignments.keys()]
@@ -1353,12 +1352,8 @@ if __name__ == "__main__":
 
                         if np.any(image == 1):
                             agents['w_explore'][pos_idx[0], pos_idx[1], a] = 1 - 1e-8
-                            # print('agent {} updated task ({}, {}) / ({}, {}) to 1-eps'.format(a, X_explore[pos_idx], Y_explore[pos_idx], pos_idx[0], pos_idx[1]))
                         else:
                             agents['w_explore'][pos_idx[0], pos_idx[1], a] = 0 + 1e-8
-                            # print('agent {} updated task ({}, {}) / ({}, {}) to 0+eps'.format(a, X_explore[pos_idx], Y_explore[pos_idx], pos_idx[0], pos_idx[1]))
-
-                        print(np.around(agents['t_explore'][:, :, a], decimals=2))
 
                 # add completed tasks to memory and retain tasks still in view
                 for a in cooperating_agents:
