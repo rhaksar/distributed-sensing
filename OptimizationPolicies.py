@@ -453,18 +453,19 @@ def CreateJointPlan(cooperating_agents, assignments, initial_positions):
 
 
 def Dispatch(positions, iteration):
-    if iteration <= 2:
-        if positions is None:
-            new_positions = np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]])
-            return new_positions
-        else:
-            new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
-            return new_positions
-
-    elif iteration == 3:
+    interval = 5
+    if positions is None:
+        new_positions = np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]])
+        return new_positions
+    elif iteration == interval:
+        new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
+        return new_positions
+    elif iteration == int(2*interval):
+        new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
+        return new_positions
+    elif iteration == int(3*interval):
         new_positions = np.append(positions, np.array([[1.25, 0.75]]), axis=0)
         return new_positions
-
     else:
         return positions
 
@@ -914,7 +915,7 @@ def CentralizedExample():
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, hidden_size=64, output_size=2, num_layers=5):
+    def __init__(self, input_size, hidden_size=256, output_size=2, num_layers=1):
         super(Policy, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -984,7 +985,8 @@ if __name__ == "__main__":
 
     grid_size = 50
     num_agents = 10
-    num_episodes = 2
+
+    num_episodes = 3
     num_agent_actions = 250
 
     max_comm_dist = 4
@@ -1003,10 +1005,48 @@ if __name__ == "__main__":
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    for ith_episode in range(num_episodes):
-        np.random.seed(ith_episode)
+    method = 'viz'
+    load_network = True
 
-        total_time = 0
+    saved_network_episodes = 0
+    if load_network:
+        filename = 'REINFORCE/' + 'REINFORCE-03-Dec-2018-1733.pth.tar'
+
+        load_data = torch.load(filename)
+        policy.load_state_dict(load_data['state_dict'])
+        optimizer.load_state_dict(load_data['optimizer'])
+        saved_network_episodes += load_data['training_episodes']
+
+        print('loaded a network from file [previously trained for {} episodes]'.format(saved_network_episodes))
+
+    if method == 'viz':
+        num_episodes = 1
+        num_agent_actions = 40
+
+        fig = pyplot.figure()
+        ax = fig.add_subplot(111, aspect='equal')
+        ax.set_xlim(0, 25)
+        ax.set_ylim(0, 25)
+
+        agentviz = {}
+        color_list = pyplot.cm.tab10(np.linspace(0, 1, 10))
+        for a in range(num_agents):
+            # agentviz['clusters'] = ax.scatter([], [], cmap='prism', edgecolor='black')
+            agentviz[a] = {}
+            # agentviz[a]['path'] = ax.plot(-1, -1, Marker='.', MarkerSize=10, color='white')
+            agentviz[a]['loc'], = ax.plot([], [], linestyle='',
+                                          Marker='.', MarkerSize=8, MarkerEdgeColor='black', zorder=2)
+
+        viz_folder = 'sim_images/reinforce/'
+
+    print('[{}] start'.format(time.strftime('%d %b %Y %H:%M')))
+    print('running for {} episodes'.format(num_episodes))
+    print()
+
+    for ith_episode in range(num_episodes):
+        np.random.seed(ith_episode+saved_network_episodes)
+
+        loop_time = 0
         sim_control = []
         agents = {'positions': None, 'memory': [[]]*num_agents, 'mode': ['explore']*num_agents,
                   'w_explore': w_init, 't_explore': t_init, 'time': np.zeros(num_agents),
@@ -1019,6 +1059,30 @@ if __name__ == "__main__":
 
         sim = FireSimulator(grid_size)
 
+        if method == 'viz':
+            tree_patch_map = {}
+            trees = []
+            for r in range(sim.state.shape[0]):
+                for c in range(sim.state.shape[1]):
+                    x = col_to_x(c)
+                    y = row_to_y(sim.state.shape[0], r)
+
+                    tree_patch_map[(r, c)] = len(tree_patch_map)
+                    trees.append(patches.Rectangle((x, y), 0.5, 0.5, alpha=0.6, zorder=0))
+
+            for tree in trees:
+                ax.add_artist(tree)
+
+            for r in range(sim.state.shape[0]):
+                for c in range(sim.state.shape[1]):
+                    idx = tree_patch_map[(r, c)]
+                    if sim.state[r, c] == 0:
+                        trees[idx].set_color('green')
+                    elif sim.state[r, c] == 1:
+                        trees[idx].set_color('red')
+                    elif sim.state[r, c] == 2:
+                        trees[idx].set_color('black')
+
         # run each forest fire simulation for a maximum of 250 agent actions
         for agent_iter in range(num_agent_actions):
             t0 = time.time()
@@ -1027,6 +1091,17 @@ if __name__ == "__main__":
             if (agent_iter+1) % 5 == 0:
                 sim.step(sim_control, dbeta=0.54)
                 sim_control = []
+
+                if method == 'viz':
+                    for r in range(sim.state.shape[0]):
+                        for c in range(sim.state.shape[1]):
+                            idx = tree_patch_map[(r, c)]
+                            if sim.state[r, c] == 0:
+                                trees[idx].set_color('green')
+                            elif sim.state[r, c] == 1:
+                                trees[idx].set_color('red')
+                            elif sim.state[r, c] == 2:
+                                trees[idx].set_color('black')
 
             if sim.end or sim.early_end:
                 print('Fire simulation terminated')
@@ -1061,7 +1136,7 @@ if __name__ == "__main__":
 
                 # is_fire feature
                 amount_fire = len(np.where(image == 1)[0])
-                agents['features'][4, 1, a] = 1 if amount_fire > 0 else 0
+                agents['features'][4, 1, a] = 0  # 1 if amount_fire > 0 else 0
 
                 # fraction of fire feature
                 agents['features'][4, 2, a] = amount_fire / 25
@@ -1069,10 +1144,18 @@ if __name__ == "__main__":
                 comm_choice = SelectAction(policy, agents['features'][:, :, a], a)
                 agents['comm_choices'][a] = comm_choice
 
-                if comm_choice == 1 and cluster_size == 0:
-                    agents['reward'][a] += -1
+                if comm_choice == 1:
+                    agents['reward'][a] += -0.1
+                    if cluster_size == 0:
+                        agents['reward'][a] += -0.5
 
             clusters = [clusters[a] if agents['comm_choices'][a] == 1 else -1 for a in range(current_num_agents)]
+
+            if method == 'viz':
+                for a in range(current_num_agents):
+                    agentviz[a]['loc'].set_data(agents['positions'][a, 0], agents['positions'][a, 1])
+                    color = 'black' if clusters[a] == -1 else color_list[clusters[a], :]
+                    agentviz[a]['loc'].set_color(color)
 
             # perform single agent or multi-agent planning based on communication choices
 
@@ -1098,7 +1181,7 @@ if __name__ == "__main__":
 
                     distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                            np.abs(Y_explore - agents['positions'][a, 1]))
-                    scores = entropy * (1 / (distances + 1e-5))
+                    scores = entropy*(1/(distances + 1e-5))
                     min_idx = np.unravel_index(np.argmin(scores), scores.shape)
 
                     tasks_ordered = [np.array([X_explore[min_idx], Y_explore[min_idx]])]
@@ -1122,13 +1205,13 @@ if __name__ == "__main__":
                 # solve convex program to generate path
                 _, path = CreateSoloPlan(tasks_ordered, agents['positions'][a, :])
                 agents['positions'][a, :] = path[0][:, 1]
-                agents['objectives'][a, :] = path[0][:, -1]
+                agents['objectives'][a, :] = path[0][:, -1]  # tasks_ordered[0]
 
-                path_length = np.linalg.norm(path[0][:, 0]-path[0][:, -1], ord=2)
-                if agents['mode'][a] == 'control' and path_length >= 4:
-                    agents['reward'][a] += -0.5
-                elif agents['mode'][a] == 'control':
-                    agents['reward'][a] += 0.5
+                # path_length = np.linalg.norm(path[0][:, 0]-path[0][:, -1], ord=2)
+                # if agents['mode'][a] == 'control' and path_length >= 4:
+                #    agents['reward'][a] += -0.5
+                # elif agents['mode'][a] == 'control':
+                #     agents['reward'][a] += 0.5
 
                 # add control task to memory if agent completed task
                 dist_to_task = np.linalg.norm(agents['positions'][a, :] - path[0][:, -1], ord=2)
@@ -1170,6 +1253,8 @@ if __name__ == "__main__":
                 cooperating_agents = [a for a in range(current_num_agents) if clusters[a] == cluster_id]
                 cooperating_agents.sort()
 
+                print('cooperating agents: {}'.format(cooperating_agents))
+
                 image, corner = CreateJointImage(sim.state, agents['positions'][cooperating_agents, :]-0.25, (5, 5))
 
                 # update exploration values from shared maps
@@ -1204,6 +1289,9 @@ if __name__ == "__main__":
                 pos_idx_dict = {}
                 if len(assignments.keys()) < len(cooperating_agents):
                     W_explore = agents['w_explore'][:, :, cooperating_agents[0]]
+                    print('exploration weights:')
+                    print(W_explore)
+
                     entropy = W_explore*np.log(W_explore)+(1-W_explore)*np.log(1-W_explore)
                     exploration_agents = [a for a in cooperating_agents if a not in assignments.keys()]
                     exploration_agents.sort()
@@ -1230,13 +1318,13 @@ if __name__ == "__main__":
                 for idx, a in enumerate(cooperating_agents):
                     # update position by taking first action
                     agents['positions'][a, :] = paths[0][2*idx:(2*idx+2), 1]
-                    agents['objectives'][a, :] = paths[0][2*idx:(2*idx+2), -1]
+                    agents['objectives'][a, :] = paths[0][2*idx:(2*idx+2), -1]  # assignments[a]
 
                     path_length = np.linalg.norm(paths[0][2*idx:(2*idx+2), 0]-paths[0][2*idx:(2*idx+2), -1], ord=2)
                     if agents['mode'][a] == 'control' and path_length >= 4:
                         agents['reward'][a] += -0.5
-                    elif agents['mode'][a] == 'control':
-                        agents['reward'][a] += 0.5
+                    # elif agents['mode'][a] == 'control':
+                    #     agents['reward'][a] += 0.5
 
                     distance_to_task = np.linalg.norm(paths[0][2*idx:(2*idx+2), -1]-agents['positions'][a, :], ord=2)
                     if agents['mode'][a] == 'control' and distance_to_task <= 0.01:
@@ -1275,25 +1363,63 @@ if __name__ == "__main__":
 
             # save reward for each agent
             for a in range(current_num_agents):
-                obj_distances = np.linalg.norm(agents['objectives'] - agents['objectives'][a, :], ord=2, axis=1)
-                if ((obj_distances > 0) & (obj_distances < 3)).any():
+                other_agents = np.array([aj for aj in range(current_num_agents) if aj != a])
+                obj_distances = np.linalg.norm(agents['objectives'][other_agents, :]
+                                               - agents['objectives'][a, :], ord=2, axis=1)
+                limit = 1
+
+                if (obj_distances < limit).any():
                     agents['reward'][a] += -0.5
                 else:
                     agents['reward'][a] += 0.5
 
                 policy.rewards[a].append(agents['reward'][a])
 
+            if method == 'viz':
+                print('iteration {}'.format(agent_iter))
+                print('communication choices:')
+                print(agents['comm_choices'])
+                print('clusters:')
+                print(clusters)
+                print('rewards:')
+                print(agents['reward'])
+                print()
+
+                # ax.figure.canvas.draw()
+                # filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
+                # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+
             t1 = time.time()
-            total_time += t1-t0
+            loop_time += t1-t0
+
+            if (agent_iter+1)%10 == 0:
+                print('completed {} agent iterations'.format(agent_iter+1))
 
             agents['time'] += 1
 
         # incorporate feedback from agents at end of simulation
-        FinishEpisode(policy, agents)
+        if method == 'train':
+            FinishEpisode(policy, agents)
 
-        print('finished episode {}'.format(ith_episode+1))
-        print('total time: {}'.format(total_time))
-        print('average loop time: {}'.format(total_time/num_agent_actions))
+            print('[{}] finished episode {}'.format(time.strftime('%d %b %Y %H:%M'),
+                                                    saved_network_episodes+ith_episode+1))
+            print('total episode time: {:0.3f}s = {:0.3f}m'.format(loop_time, loop_time/60))
+            print('average iteration time: {:0.3f}s'.format(loop_time/num_agent_actions))
+            print('average rewards:')
+            for a in range(num_agents):
+                print('{:0.3f}'.format(np.mean(policy.rewards[a])))
+            print()
+
+            checkpoint = {
+                'state_dict': policy.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'training_episodes': saved_network_episodes + num_episodes
+            }
+
+            checkpoint_filename = 'REINFORCE/' + 'REINFORCE-' + time.strftime('%d-%b-%Y-%H%M') + '.pth.tar'
+            torch.save(checkpoint, checkpoint_filename)
+
+    print('[{}] finish'.format(time.strftime('%d %b %Y %H:%M')))
 
     print('done')
 
