@@ -1007,8 +1007,8 @@ if __name__ == "__main__":
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    method = 'train'
-    load_network = False
+    method = 'viz'
+    load_network = True
 
     saved_network_episodes = 0
     if load_network:
@@ -1024,17 +1024,16 @@ if __name__ == "__main__":
 
         print('loaded a network [{}] from file [previously trained for {} episodes]'.format(filename,
                                                                                             saved_network_episodes))
-
+    agentviz = {}
     if method == 'viz':
         num_episodes = 1
-        num_agent_actions = 40
+        num_agent_actions = 20
 
         fig = pyplot.figure()
         ax = fig.add_subplot(111, aspect='equal')
         ax.set_xlim(0, 25)
         ax.set_ylim(0, 25)
 
-        agentviz = {}
         color_list = pyplot.cm.tab10(np.linspace(0, 1, 10))
         for a in range(num_agents):
             # agentviz['clusters'] = ax.scatter([], [], cmap='prism', edgecolor='black')
@@ -1046,7 +1045,10 @@ if __name__ == "__main__":
         viz_folder = 'sim_images/reinforce/'
 
     print('[{}] start'.format(time.strftime('%d %b %Y %H:%M')))
-    print('running for {} episodes'.format(num_episodes))
+    if method == 'train':
+        print('training for {} episodes'.format(num_episodes))
+    elif method == 'viz':
+        print('visualizing for {} episodes'.format(num_episodes))
     print()
 
     for ith_episode in range(num_episodes):
@@ -1057,7 +1059,7 @@ if __name__ == "__main__":
         agents = {'positions': None, 'memory': [[]]*num_agents, 'mode': ['explore']*num_agents,
                   'w_explore': w_init, 't_explore': t_init, 'time': np.zeros(num_agents),
                   'features': np.zeros((5, input_size, num_agents)), 'capacity': 10*np.ones(num_agents),
-                  'image_corners': np.zeros((num_agents, 2)), 'comm_choices': np.zeros(num_agents),
+                  'image_corners': np.zeros((num_agents, 2)), 'comm_choices': np.zeros(num_agents).astype(int),
                   'reward': np.zeros(num_agents), 'objectives': np.zeros((num_agents, 2))}
         for a in range(num_agents):
             policy.rewards[a] = []
@@ -1124,6 +1126,9 @@ if __name__ == "__main__":
             Z = spc.hierarchy.linkage(agents['positions'], method='ward')
             clusters = spc.hierarchy.fcluster(Z, max_comm_dist, criterion='distance')
 
+            print('initial clusters:')
+            print(clusters)
+
             # use policy to determine if each agent wants to communicate within their cluster
             for a in range(current_num_agents):
                 image, corner = CreateSoloImage(sim.state, agents['positions'][a, :]-0.25, (5, 5))
@@ -1147,12 +1152,12 @@ if __name__ == "__main__":
                 # fraction of fire feature
                 agents['features'][4, 2, a] = amount_fire / 25
 
-                comm_choice = SelectAction(policy, agents['features'][:, :, a], a)
+                comm_choice = int(SelectAction(policy, agents['features'][:, :, a], a))
                 agents['comm_choices'][a] = comm_choice
 
                 if comm_choice == 1:
                     # agents['reward'][a] += -0.1
-                    if cluster_size == 0:
+                    if cluster_size == 1:
                         agents['reward'][a] += -0.5
 
             clusters = [clusters[a] if agents['comm_choices'][a] == 1 else -1 for a in range(current_num_agents)]
@@ -1245,9 +1250,9 @@ if __name__ == "__main__":
                         agents['w_explore'][min_idx[0], min_idx[1], a] = 0 + 1e-8
 
                 # retain control tasks still in view
-                agent_memory = [m for m in agents['memory'][a]
-                                if -5/4 <= m[0]-agents['positions'][a, :][0] <= 5/4 and
-                                   -5/4 <= m[1]-agents['positions'][a, :][1] <= 5/4]
+                agents['memory'][a] = [m for m in agents['memory'][a]
+                                       if -5/4 <= m[0]-agents['positions'][a, :][0] <= 5/4
+                                       and -5/4 <= m[1]-agents['positions'][a, :][1] <= 5/4]
 
             # perform multi-agent planning for clusters
             for cluster_id in range(len(clusters)):
@@ -1258,6 +1263,8 @@ if __name__ == "__main__":
                 # get agents in co-operating cluster
                 cooperating_agents = [a for a in range(current_num_agents) if clusters[a] == cluster_id]
                 cooperating_agents.sort()
+
+                # print('cooperating agents: {}'.format(cooperating_agents))
 
                 image, corner = CreateJointImage(sim.state, agents['positions'][cooperating_agents, :]-0.25, (5, 5))
 
@@ -1387,9 +1394,9 @@ if __name__ == "__main__":
                 print(agents['reward'])
                 print()
 
-                ax.figure.canvas.draw()
-                filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
-                pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+                # ax.figure.canvas.draw()
+                # filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
+                # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
             t1 = time.time()
             loop_time += t1-t0
