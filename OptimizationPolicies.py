@@ -177,18 +177,23 @@ def CreateTasks(image, lower_left_corner):
         return tasks
 
     for _, (r, c) in enumerate(zip(fire[0], fire[1])):
+        has_healthy = False
         x, y = col_to_x(c-1)+0.25, row_to_y(image.shape[0], r-1)+0.25
         x += lower_left_corner[0]
         y += lower_left_corner[1]
 
         weight = 0
+        explore_weight = 0
         for (dr, dc) in neighbors:
             if expand_image[r+dr, c+dc] == 0:
                 weight += 1
+                has_healthy = True
             elif expand_image[r+dr, c+dc] == -1:
-                weight += 0.35
+                explore_weight += 0.35
 
         if weight > 0:
+            if has_healthy:
+                weight += explore_weight
             t = np.around(np.array([x, y]), decimals=2)
             tasks.append((t, weight))
 
@@ -455,7 +460,7 @@ def CreateJointPlan(cooperating_agents, assignments, initial_positions):
 
 
 def Dispatch(positions, iteration):
-    interval = 5
+    interval = 7
     if positions is None:
         new_positions = np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]])
         return new_positions
@@ -465,9 +470,9 @@ def Dispatch(positions, iteration):
     elif iteration == int(2*interval):
         new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
         return new_positions
-    elif iteration == int(3*interval):
-        new_positions = np.append(positions, np.array([[1.25, 0.75]]), axis=0)
-        return new_positions
+    # elif iteration == int(3*interval):
+    #     new_positions = np.append(positions, np.array([[1.25, 0.75]]), axis=0)
+    #     return new_positions
     else:
         return positions
 
@@ -917,7 +922,7 @@ def CentralizedExample():
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, hidden_size=256, output_size=2, num_layers=1):
+    def __init__(self, input_size, hidden_size=512, output_size=2, num_layers=1):
         super(Policy, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -986,15 +991,15 @@ if __name__ == "__main__":
     eps = np.finfo(np.float32).eps.item()
 
     grid_size = 50
-    num_agents = 10
+    num_agents = 9
 
     num_episodes = 5
     num_agent_actions = 250
 
     max_comm_dist = 4
 
-    x_explore = np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
-    y_explore = np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
+    x_explore = np.arange(0.75, 24.75, 1)  # np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
+    y_explore = np.arange(0.75, 24.75, 1)  # np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
     num_explore = len(x_explore)*len(y_explore)
     X_explore, Y_explore = np.meshgrid(x_explore, y_explore)
 
@@ -1007,8 +1012,8 @@ if __name__ == "__main__":
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    method = 'viz'
-    load_network = True
+    method = 'train'
+    load_network = False
 
     saved_network_episodes = 0
     if load_network:
@@ -1027,7 +1032,7 @@ if __name__ == "__main__":
     agentviz = {}
     if method == 'viz':
         num_episodes = 1
-        num_agent_actions = 20
+        num_agent_actions = 10
 
         fig = pyplot.figure()
         ax = fig.add_subplot(111, aspect='equal')
@@ -1126,9 +1131,6 @@ if __name__ == "__main__":
             Z = spc.hierarchy.linkage(agents['positions'], method='ward')
             clusters = spc.hierarchy.fcluster(Z, max_comm_dist, criterion='distance')
 
-            print('initial clusters:')
-            print(clusters)
-
             # use policy to determine if each agent wants to communicate within their cluster
             for a in range(current_num_agents):
                 image, corner = CreateSoloImage(sim.state, agents['positions'][a, :]-0.25, (5, 5))
@@ -1147,7 +1149,7 @@ if __name__ == "__main__":
 
                 # is_fire feature
                 amount_fire = len(np.where(image == 1)[0])
-                agents['features'][4, 1, a] = 0  # 1 if amount_fire > 0 else 0
+                agents['features'][4, 1, a] = 1 if amount_fire > 0 else 0
 
                 # fraction of fire feature
                 agents['features'][4, 2, a] = amount_fire / 25
@@ -1156,7 +1158,7 @@ if __name__ == "__main__":
                 agents['comm_choices'][a] = comm_choice
 
                 if comm_choice == 1:
-                    # agents['reward'][a] += -0.1
+                    agents['reward'][a] += -0.1
                     if cluster_size == 1:
                         agents['reward'][a] += -0.5
 
@@ -1187,8 +1189,8 @@ if __name__ == "__main__":
                 min_idx = None
                 if not len(tasks):
                     # explore
-                    entropy = agents['w_explore'][:, :, a]*np.log(agents['w_explore'][:, :, a]) + \
-                              (1-agents['w_explore'][:, :, a])*np.log(1-agents['w_explore'][:, :, a])
+                    W_explore = agents['w_explore'][:, :, a]
+                    entropy = W_explore*np.log(W_explore) + (1-W_explore)*np.log(1-W_explore)
 
                     distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                            np.abs(Y_explore - agents['positions'][a, 1]))
@@ -1216,7 +1218,7 @@ if __name__ == "__main__":
                 # solve convex program to generate path
                 _, path = CreateSoloPlan(tasks_ordered, agents['positions'][a, :])
                 agents['positions'][a, :] = path[0][:, 1]
-                agents['objectives'][a, :] = path[0][:, -1]  # tasks_ordered[0]
+                agents['objectives'][a, :] = tasks_ordered[0]  # path[0][:, -1]
 
                 # path_length = np.linalg.norm(path[0][:, 0]-path[0][:, -1], ord=2)
                 # if agents['mode'][a] == 'control' and path_length >= 4:
@@ -1235,7 +1237,7 @@ if __name__ == "__main__":
 
                     distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                            np.abs(Y_explore - agents['positions'][a, 1]))
-                    close_pos = np.where(distances <= 1.5)
+                    close_pos = np.where(distances <= 1)
                     if len(close_pos[0]):
                         for r, c in zip(close_pos[0], close_pos[1]):
                             agents['t_explore'][r, c, a] = agents['time'][a]
@@ -1251,8 +1253,8 @@ if __name__ == "__main__":
 
                 # retain control tasks still in view
                 agents['memory'][a] = [m for m in agents['memory'][a]
-                                       if -5/4 <= m[0]-agents['positions'][a, :][0] <= 5/4
-                                       and -5/4 <= m[1]-agents['positions'][a, :][1] <= 5/4]
+                                       if -5/4 <= m[0]-agents['positions'][a, 0] <= 5/4
+                                       and -5/4 <= m[1]-agents['positions'][a, 1] <= 5/4]
 
             # perform multi-agent planning for clusters
             for cluster_id in range(len(clusters)):
@@ -1327,11 +1329,11 @@ if __name__ == "__main__":
                 for idx, a in enumerate(cooperating_agents):
                     # update position by taking first action
                     agents['positions'][a, :] = paths[0][2*idx:(2*idx+2), 1]
-                    agents['objectives'][a, :] = paths[0][2*idx:(2*idx+2), -1]  # assignments[a]
+                    agents['objectives'][a, :] = assignments[a]  # paths[0][2*idx:(2*idx+2), -1]
 
                     path_length = np.linalg.norm(paths[0][2*idx:(2*idx+2), 0]-paths[0][2*idx:(2*idx+2), -1], ord=2)
-                    if agents['mode'][a] == 'control' and path_length >= 4:
-                        agents['reward'][a] += -0.5
+                    # if agents['mode'][a] == 'control' and path_length >= 4:
+                    #    agents['reward'][a] += -0.5
                     # elif agents['mode'][a] == 'control':
                     #     agents['reward'][a] += 0.5
 
@@ -1345,7 +1347,7 @@ if __name__ == "__main__":
 
                         distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                                np.abs(Y_explore - agents['positions'][a, 1]))
-                        close_pos = np.where(distances <= 1.5)
+                        close_pos = np.where(distances <= 1)
                         if len(close_pos[0]):
                             for r, c in zip(close_pos[0], close_pos[1]):
                                 agents['t_explore'][r, c, a] = agents['time'][a]
@@ -1380,7 +1382,7 @@ if __name__ == "__main__":
                 if (obj_distances < limit).any():
                     agents['reward'][a] += -0.5
                 else:
-                    agents['reward'][a] += 0.5
+                    agents['reward'][a] += 0.1
 
                 policy.rewards[a].append(agents['reward'][a])
 
@@ -1394,9 +1396,9 @@ if __name__ == "__main__":
                 print(agents['reward'])
                 print()
 
-                # ax.figure.canvas.draw()
-                # filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
-                # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+                ax.figure.canvas.draw()
+                filename = viz_folder + 'iteration' + str(agent_iter+1).zfill(3) + '.png'
+                pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
             t1 = time.time()
             loop_time += t1-t0
