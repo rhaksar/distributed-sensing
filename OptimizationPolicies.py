@@ -468,8 +468,8 @@ def Dispatch(positions, iteration):
         new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
         return new_positions
     elif iteration == int(2*interval):
-        new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
-        return new_positions
+       new_positions = np.append(positions, np.array([[0.75, 0.75], [0.75, 1.25], [1.25, 0.75]]), axis=0)
+       return new_positions
     # elif iteration == int(3*interval):
     #     new_positions = np.append(positions, np.array([[1.25, 0.75]]), axis=0)
     #     return new_positions
@@ -991,7 +991,7 @@ if __name__ == "__main__":
     # SingleAgentExample()
     # MultiAgentExample()
 
-    input_size = 28
+    input_size = 29
     policy = Policy(input_size=input_size)
     optimizer = optim.Adam(policy.parameters(), lr=1e-2)
     eps = np.finfo(np.float32).eps.item()
@@ -1014,12 +1014,23 @@ if __name__ == "__main__":
 
     w_init = np.zeros((X_explore.shape[0], X_explore.shape[1], num_agents))
     w_init[:, :, :] = np.expand_dims(0.5*np.ones_like(X_explore)-0.2*d, axis=2)
+    w_baseline = np.copy(w_init[:, :, 0])
     t_init = np.zeros_like(w_init)
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    method = 'viz'
-    load_network = True
+    method = 'train'
+    load_network = False
+
+    # fig = pyplot.figure(1)
+    # sim = FireSimulator(grid_size)
+    # ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
+    # ax1.set_xlim(0, 25)
+    # ax1.set_ylim(0, 25)
+    # ax1.plot(X_explore, Y_explore, linestyle='', Marker='.', Markersize=5, color='white')
+    # ax1 = PlotForest(sim.state, ax1)
+    #
+    # pyplot.savefig('exploration.png', dpi=300, bbox_inches='tight')
 
     saved_network_episodes = 0
     if load_network:
@@ -1038,7 +1049,7 @@ if __name__ == "__main__":
     agentviz = {}
     if method == 'viz':
         num_episodes = 1
-        num_agent_actions = 100
+        num_agent_actions = 200
 
         fig = pyplot.figure()
         ax = fig.add_subplot(111, aspect='equal')
@@ -1063,7 +1074,9 @@ if __name__ == "__main__":
     print()
 
     for ith_episode in range(num_episodes):
-        np.random.seed(ith_episode+saved_network_episodes)
+        np.random.seed(100)
+        if method == 'viz':
+            torch.manual_seed(ith_episode+saved_network_episodes)
 
         loop_time = 0
         sim_control = []
@@ -1139,6 +1152,18 @@ if __name__ == "__main__":
 
             # use policy to determine if each agent wants to communicate within their cluster
             for a in range(current_num_agents):
+                # add entropy to exploration weights
+                W_explore = agents['w_explore'][:, :, a]
+                low_weights = np.where(W_explore <= w_baseline)
+                # print('old weights')
+                # print(np.around(W_explore, decimals=2))
+                # W_explore[low_weights] = shifted_sigmoid(W_explore[low_weights])
+                W_explore[low_weights] += 0.10*(w_baseline[low_weights] - W_explore[low_weights])
+                agents['w_explore'][:, :, a] = W_explore
+                # print('new weights')
+                # print(np.around(W_explore, decimals=2))
+
+                # generate features for policy
                 image, corner = CreateSoloImage(sim.state, agents['positions'][a, :]-0.25, (5, 5))
                 agents['image_corners'][a, :] = corner
 
@@ -1146,7 +1171,7 @@ if __name__ == "__main__":
                 agents['features'][4, :, a] = np.zeros(input_size)
 
                 # image feature
-                agents['features'][4, 3:, a] = image.reshape(25)
+                agents['features'][4, 4:, a] = image.reshape(25)
 
                 # cluster size feature
                 cluster_id = clusters[a]
@@ -1158,7 +1183,16 @@ if __name__ == "__main__":
                 agents['features'][4, 1, a] = 1 if amount_fire > 0 else 0
 
                 # fraction of fire feature
-                agents['features'][4, 2, a] = amount_fire / 25
+                # agents['features'][4, 2, a] = amount_fire / 25
+
+                # nearest agent in cluster feature
+                cluster_agents = [aj for aj in range(current_num_agents) if aj != a and clusters[aj] == cluster_id]
+                if len(cluster_agents) == 0:
+                    nearest_cluster_agent_dist = 100
+                else:
+                    nearest_cluster_agent_dist = np.amin(np.linalg.norm(agents['positions'][cluster_agents, :]
+                                                                        - agents['positions'][a, :], ord=2, axis=1))
+                agents['features'][4, 3, a] = nearest_cluster_agent_dist
 
                 comm_choice = int(SelectAction(policy, agents['features'][:, :, a], a))
                 agents['comm_choices'][a] = comm_choice
@@ -1190,7 +1224,7 @@ if __name__ == "__main__":
                     continue
 
                 # create tasks accounting for memory
-                image = agents['features'][4, 3:, a].reshape((5, 5))
+                image = agents['features'][4, 4:, a].reshape((5, 5))
                 tasks = CreateTasks(image, agents['image_corners'][a, :])
                 tasks = [t for t in tasks if tuple(t[0]) not in agents['memory'][a]]
 
@@ -1203,6 +1237,7 @@ if __name__ == "__main__":
 
                     distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                            np.abs(Y_explore - agents['positions'][a, 1]))
+                    distances[distances <= 0.01] = 10
                     scores = entropy*(1/(distances + 1e-5))
                     min_idx = np.unravel_index(np.argmin(scores), scores.shape)
 
@@ -1250,15 +1285,17 @@ if __name__ == "__main__":
                     if len(close_pos[0]):
                         for r, c in zip(close_pos[0], close_pos[1]):
                             agents['t_explore'][r, c, a] = agents['time'][a]
-                            agents['w_explore'][r, c, a] = 1 - 1e-8
+                            agents['w_explore'][r, c, a] = 0.5  # 1 - 1e-8
 
                 # update exploration node if agent close enough
                 if agents['mode'][a] == 'explore' and dist_to_task < 0.01:
                     agents['t_explore'][min_idx[0], min_idx[1], a] = agents['time'][a]
-                    if np.any(image == 1):
+
+                    image_healthy_rc = np.where(image == 0)
+                    if len(image_healthy_rc[0]) <= 4:  # if not np.any(image == 0):
                         agents['w_explore'][min_idx[0], min_idx[1], a] = 1 - 1e-8
                     else:
-                        agents['w_explore'][min_idx[0], min_idx[1], a] = 0 + 1e-8
+                        agents['w_explore'][min_idx[0], min_idx[1], a] = 0 + 1e-3
 
                 # retain control tasks still in view
                 agents['memory'][a] = [m for m in agents['memory'][a]
@@ -1320,6 +1357,7 @@ if __name__ == "__main__":
                     for i, a in enumerate(exploration_agents):
                         distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                                np.abs(Y_explore - agents['positions'][a, 1]))
+                        distances[distances <= 0.01] = 10
                         scores = entropy*(1/(distances+1e-5))
                         cost_matrix[i, :] = scores.reshape(num_explore)
 
@@ -1360,18 +1398,19 @@ if __name__ == "__main__":
                         if len(close_pos[0]):
                             for r, c in zip(close_pos[0], close_pos[1]):
                                 agents['t_explore'][r, c, a] = agents['time'][a]
-                                agents['w_explore'][r, c, a] = 1 - 1e-8
+                                agents['w_explore'][r, c, a] = 0.5  # 1 - 1e-8
 
                     elif agents['mode'][a] == 'explore' and distance_to_task <= 0.01:
                         pos_idx = pos_idx_dict[a]
                         agents['t_explore'][pos_idx[0], pos_idx[1], a] = agents['time'][a]
-                        image = agents['features'][4, 3:, a].reshape((5, 5))
+                        image = agents['features'][4, 4:, a].reshape((5, 5))
                         # image, corner = CreateSoloImage(sim.state, agents['positions'][a, :]-0.25, (5, 5))
 
-                        if np.any(image == 1):
+                        image_healthy_rc = np.where(image == 0)
+                        if len(image_healthy_rc[0]) <= 4: # if not np.any(image == 0):
                             agents['w_explore'][pos_idx[0], pos_idx[1], a] = 1 - 1e-8
                         else:
-                            agents['w_explore'][pos_idx[0], pos_idx[1], a] = 0 + 1e-8
+                            agents['w_explore'][pos_idx[0], pos_idx[1], a] = 0 + 1e-3
 
                 # add completed tasks to memory and retain tasks still in view
                 for a in cooperating_agents:
@@ -1401,6 +1440,8 @@ if __name__ == "__main__":
 
                 if not (obj_distances < limit).any():
                     agents['reward'][a] += 0.5
+                else:
+                    agents['reward'][a] += -1
 
                 if agents['comm_choices'][a] == 0:
                     agents['reward'][a] *= 2
