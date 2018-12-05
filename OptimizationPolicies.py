@@ -922,7 +922,7 @@ def CentralizedExample():
 
 
 class Policy(nn.Module):
-    def __init__(self, input_size, hidden_size=512, output_size=2, num_layers=1):
+    def __init__(self, input_size, hidden_size=256, output_size=2, num_layers=1):
         super(Policy, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -978,6 +978,12 @@ def FinishEpisode(policy, agents):
     return
 
 
+def shifted_sigmoid(x):
+    c = 10
+    d = -0.5
+    return 1/(1 + np.exp(-c*x))+d
+
+
 if __name__ == "__main__":
 
     # np.random.seed(42)
@@ -1012,8 +1018,8 @@ if __name__ == "__main__":
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    method = 'train'
-    load_network = False
+    method = 'viz'
+    load_network = True
 
     saved_network_episodes = 0
     if load_network:
@@ -1032,7 +1038,7 @@ if __name__ == "__main__":
     agentviz = {}
     if method == 'viz':
         num_episodes = 1
-        num_agent_actions = 10
+        num_agent_actions = 100
 
         fig = pyplot.figure()
         ax = fig.add_subplot(111, aspect='equal')
@@ -1157,10 +1163,13 @@ if __name__ == "__main__":
                 comm_choice = int(SelectAction(policy, agents['features'][:, :, a], a))
                 agents['comm_choices'][a] = comm_choice
 
-                if comm_choice == 1:
-                    agents['reward'][a] += -0.1
-                    if cluster_size == 1:
-                        agents['reward'][a] += -0.5
+                # if comm_choice == 0 and cluster_size > 1:
+                #     agents['reward'][a] += 0.1
+
+                # if comm_choice == 1:
+                #     agents['reward'][a] += -0.1
+                #     if cluster_size == 1:
+                #         agents['reward'][a] += -0.5
 
             clusters = [clusters[a] if agents['comm_choices'][a] == 1 else -1 for a in range(current_num_agents)]
 
@@ -1377,12 +1386,24 @@ if __name__ == "__main__":
                 other_agents = np.array([aj for aj in range(current_num_agents) if aj != a])
                 obj_distances = np.linalg.norm(agents['objectives'][other_agents, :]
                                                - agents['objectives'][a, :], ord=2, axis=1)
-                limit = 1
 
-                if (obj_distances < limit).any():
-                    agents['reward'][a] += -0.5
-                else:
-                    agents['reward'][a] += 0.1
+                # if agents['mode'][a] == 'control':
+                #     limit = 2
+                # else:
+                #     limit = 1
+
+                limit = 0.25
+
+                # if (obj_distances < limit).any():
+                #    agents['reward'][a] += -0.5
+                # else:
+                #     agents['reward'][a] += 0.1
+
+                if not (obj_distances < limit).any():
+                    agents['reward'][a] += 0.5
+
+                if agents['comm_choices'][a] == 0:
+                    agents['reward'][a] *= 2
 
                 policy.rewards[a].append(agents['reward'][a])
 
