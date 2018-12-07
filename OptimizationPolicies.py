@@ -401,7 +401,7 @@ def CreateJointPlan(cooperating_agents, assignments, initial_positions):
     safe_radius = 0.3
     scp_iterations = 3
 
-    T = 5
+    T = 7
     nominal_paths = np.zeros((2*num_agents, T+1))
     nominal_actions = None
 
@@ -1004,8 +1004,8 @@ if __name__ == "__main__":
 
     max_comm_dist = 4
 
-    x_explore = np.arange(0.75, 24.75, 1)  # np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
-    y_explore = np.arange(0.75, 24.75, 1)  # np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
+    x_explore = np.arange(0.75, 24.75, 1)+0.5  # np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
+    y_explore = np.arange(0.75, 24.75, 1)+0.5  # np.linspace(2.5, 22.5, 11, endpoint=True)-0.25
     num_explore = len(x_explore)*len(y_explore)
     X_explore, Y_explore = np.meshgrid(x_explore, y_explore)
 
@@ -1019,8 +1019,8 @@ if __name__ == "__main__":
     m, n, _ = w_init.shape
     I, J = np.ogrid[:m, :n]
 
-    method = 'train'
-    load_network = False
+    method = 'viz'
+    load_network = True
 
     # fig = pyplot.figure(1)
     # sim = FireSimulator(grid_size)
@@ -1029,6 +1029,7 @@ if __name__ == "__main__":
     # ax1.set_ylim(0, 25)
     # ax1.plot(X_explore, Y_explore, linestyle='', Marker='.', Markersize=5, color='white')
     # ax1 = PlotForest(sim.state, ax1)
+    # pyplot.show()
     #
     # pyplot.savefig('exploration.png', dpi=300, bbox_inches='tight')
 
@@ -1124,6 +1125,8 @@ if __name__ == "__main__":
                 sim.step(sim_control, dbeta=0.54)
                 sim_control = []
 
+                agents['memory'] = [[]]*num_agents
+
                 if method == 'viz':
                     for r in range(sim.state.shape[0]):
                         for c in range(sim.state.shape[1]):
@@ -1138,6 +1141,10 @@ if __name__ == "__main__":
             if sim.end or sim.early_end:
                 print('Fire simulation terminated')
                 print(sim.stats)
+
+                # for a in range(current_num_agents):
+                #    policy.rewards[a].extend(2*np.ones(num_agent_actions-agent_iter))
+
                 break
 
             # dispatch agents in first few simulation iterations
@@ -1149,6 +1156,8 @@ if __name__ == "__main__":
             # determine communication clusters
             Z = spc.hierarchy.linkage(agents['positions'], method='ward')
             clusters = spc.hierarchy.fcluster(Z, max_comm_dist, criterion='distance')
+            # clusters = np.ones(current_num_agents).astype(np.int8)
+            orig_clusters = np.copy(clusters)
 
             # use policy to determine if each agent wants to communicate within their cluster
             for a in range(current_num_agents):
@@ -1205,7 +1214,7 @@ if __name__ == "__main__":
                 #     if cluster_size == 1:
                 #         agents['reward'][a] += -0.5
 
-            clusters = [clusters[a] if agents['comm_choices'][a] == 1 else -1 for a in range(current_num_agents)]
+            clusters = [clusters[aj] if agents['comm_choices'][aj] == 1 else -1 for aj in range(current_num_agents)]
 
             if method == 'viz':
                 for a in range(current_num_agents):
@@ -1237,8 +1246,8 @@ if __name__ == "__main__":
 
                     distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                            np.abs(Y_explore - agents['positions'][a, 1]))
-                    distances[distances <= 0.01] = 10
                     scores = entropy*(1/(distances + 1e-5))
+                    scores[distances <= 0.01] = 0  # ignore point if already on it
                     min_idx = np.unravel_index(np.argmin(scores), scores.shape)
 
                     tasks_ordered = [np.array([X_explore[min_idx], Y_explore[min_idx]])]
@@ -1309,7 +1318,7 @@ if __name__ == "__main__":
                     continue
 
                 # get agents in co-operating cluster
-                cooperating_agents = [a for a in range(current_num_agents) if clusters[a] == cluster_id]
+                cooperating_agents = [aj for aj in range(current_num_agents) if clusters[aj] == cluster_id]
                 cooperating_agents.sort()
 
                 # print('cooperating agents: {}'.format(cooperating_agents))
@@ -1324,8 +1333,8 @@ if __name__ == "__main__":
                 agents['t_explore'][:, :, cooperating_agents] = np.expand_dims(latest_times, axis=2)
 
                 # get tasks from image, accounting for joint memory
-                joint_memory = list(itertools.chain.from_iterable([m for a, m in enumerate(agents['memory'])
-                                                                   if a in cooperating_agents]))
+                joint_memory = list(itertools.chain.from_iterable([m for aj, m in enumerate(agents['memory'])
+                                                                   if aj in cooperating_agents]))
                 tasks = CreateTasks(image, corner)
                 tasks = [t for t in tasks if tuple(t[0]) not in joint_memory]
 
@@ -1357,8 +1366,15 @@ if __name__ == "__main__":
                     for i, a in enumerate(exploration_agents):
                         distances = np.maximum(np.abs(X_explore - agents['positions'][a, 0]),
                                                np.abs(Y_explore - agents['positions'][a, 1]))
-                        distances[distances <= 0.01] = 10
                         scores = entropy*(1/(distances+1e-5))
+                        scores[distances <= 0.01] = 0  # ignore point if already on it
+                        # ignore points where control will be applied (if its also an exploration point)
+                        for aj in assignments.keys():
+                            control_task = assignments[aj]
+                            distances = np.maximum(np.abs(X_explore - control_task[0]),
+                                                   np.abs(Y_explore - control_task[1]))
+                            scores[distances <= 0.01] = 0
+
                         cost_matrix[i, :] = scores.reshape(num_explore)
 
                     agent_idx, task_idx = spo.linear_sum_assignment(cost_matrix)
@@ -1423,8 +1439,13 @@ if __name__ == "__main__":
             # save reward for each agent
             for a in range(current_num_agents):
                 other_agents = np.array([aj for aj in range(current_num_agents) if aj != a])
-                obj_distances = np.linalg.norm(agents['objectives'][other_agents, :]
-                                               - agents['objectives'][a, :], ord=2, axis=1)
+                # other_agents = np.array([aj for aj in range(current_num_agents) if aj != a
+                #                          and orig_clusters[aj] == orig_clusters[a]])
+                if not other_agents.size > 0:
+                    obj_distances = np.array(np.inf)
+                else:
+                    obj_distances = np.linalg.norm(agents['objectives'][other_agents, :]
+                                                   - agents['objectives'][a, :], ord=2, axis=1)
 
                 # if agents['mode'][a] == 'control':
                 #     limit = 2
@@ -1433,11 +1454,13 @@ if __name__ == "__main__":
 
                 limit = 0.25
 
+                # first attempt
                 # if (obj_distances < limit).any():
                 #    agents['reward'][a] += -0.5
                 # else:
                 #     agents['reward'][a] += 0.1
 
+                # second attempt
                 if not (obj_distances < limit).any():
                     agents['reward'][a] += 0.5
                 else:
@@ -1446,10 +1469,18 @@ if __name__ == "__main__":
                 if agents['comm_choices'][a] == 0:
                     agents['reward'][a] *= 2
 
+                # third attempt
+                # if agents['comm_choices'][a] == 0 and not (obj_distances < limit).any():
+                #     agents['reward'][a] += 1
+                # elif agents['comm_choices'][a] == 0 and (obj_distances < limit).any():
+                #     agents['reward'][a] += -1
+
                 policy.rewards[a].append(agents['reward'][a])
 
             if method == 'viz':
-                print('iteration {}'.format(agent_iter))
+                print('iteration {}'.format(agent_iter+1))
+                print('original clusters')
+                print(orig_clusters)
                 print('communication choices:')
                 print(agents['comm_choices'])
                 print('clusters:')
