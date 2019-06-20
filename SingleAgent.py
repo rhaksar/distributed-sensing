@@ -17,7 +17,7 @@ from fires.ForestElements import Tree, SimpleUrban
 
 
 def observation_probability(element, state, observation):
-    measure_correct = 0.9
+    measure_correct = 0.8
     measure_wrong = None
     if isinstance(element, Tree):
         measure_wrong = 0.5*(1-measure_correct)
@@ -64,8 +64,22 @@ def filter_element_update(key, element, prior, advance, control, observation):
 
         if key in observation.keys():
             posterior[s_t] *= observation_probability(element, s_t, observation[key])
-        # else:
-        #     posterior[s_t] *= (1/len(element.state_space))
+        else:
+            coeff = 0.01
+            mean = np.mean(posterior)
+            posterior = [v - coeff*np.sign(v-mean)*np.abs(v-mean) for v in posterior]
+
+    # for s_t in element.state_space:
+    #     for s_tm1 in element.state_space:
+    #         if advance and key in observation.keys():
+    #             for active in range(num_neighbors+1):
+    #                 values = [element.dynamics((s_tm1, active, s_t), control[key]), caf[active], prior[key][s_tm1]]
+    #                 posterior[s_t] += multiply_probabilities(values)
+    #         else:
+    #             posterior[s_t] += (s_t == s_tm1)*prior[key][s_tm1]
+    #
+    #     if key in observation.keys():
+    #         posterior[s_t] *= observation_probability(element, s_t, observation[key])
 
     posterior /= np.sum(posterior)
     return posterior
@@ -122,7 +136,7 @@ def xy_to_rc(y_limit, xy):
     return y_to_row(y_limit, xy[1]), x_to_col(xy[0])
 
 
-def PlotForest(state, axis):
+def PlotForest(state, axis, simulation):
     # fig = pyplot.figure()
     # ax = fig.add_subplot(111, aspect='equal')
     # pyplot.xlim([0, grid_size/2])
@@ -138,7 +152,12 @@ def PlotForest(state, axis):
 
             rec = patches.Rectangle((x, y), (1/1), (1/1), alpha=0.6)
             if state[r, c] == 0:
-                rec.set_color('green')
+                if isinstance(simulation.group[(r, c)], Tree):
+                    rec.set_color('green')
+                elif isinstance(simulation.group[(r, c)], SimpleUrban):
+                    rec.set_color('sandybrown')
+                    # rec.set_color('#F8C89F')
+                    # rec.set_alpha(1)
             elif state[r, c] == 1:
                 rec.set_color('red')
             elif state[r, c] == 2:
@@ -269,19 +288,19 @@ if __name__ == '__main__':
         # belief[key][element.state] = 1
     agent_filter = ApproxFilter(belief)
 
-    folder = 'sim_images/single_agent_2_3/'
+    folder = 'sim_images/single_agent_2_3.1/'
 
-    for agent_iteration in range(100):
+    for agent_iteration in range(250):
         img, obs, _ = create_image(sim, agent_position, uncertainty=True)
 
-        # fig = pyplot.figure(1)
-        # ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
-        # ax1.set_xlim(0, 25)
-        # ax1.set_ylim(0, 25)
-        # ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
-        #
-        # ax1 = PlotForest(sim.dense_state(), ax1)
-        # ax1.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=2, color='blue')
+        fig = pyplot.figure(1)
+        ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
+        ax1.set_xlim(0, 25)
+        ax1.set_ylim(0, 25)
+        ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
+
+        ax1 = PlotForest(sim.dense_state(), ax1, sim)
+        ax1.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=2, color='blue')
 
         update = False
         if (agent_iteration+1) % 5 == 0:
@@ -297,7 +316,7 @@ if __name__ == '__main__':
         for key in belief.keys():
             entropy_matrix[key[0], key[1]] = entropy[key]
 
-        # i = ax2.imshow(entropy_matrix, vmin=0, vmax=2, extent=[0, sim.dims[0], 0, sim.dims[1]])
+        i = ax2.imshow(entropy_matrix, vmin=0, vmax=2, extent=[0, sim.dims[0], 0, sim.dims[1]])
         # ax2.set_xticks(np.arange(0, sim.dims[0]+1, 1))
         # ax2.set_yticks(np.arange(0, sim.dims[1]+1, 1))
         # ax2.grid()
@@ -320,10 +339,13 @@ if __name__ == '__main__':
         agent_position = np.asarray(agent_position_next)
 
         filename = folder + 'iteration' + str(agent_iteration+1).zfill(3) + '.png'
-        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
         # pyplot.show()
-        # pyplot.close(fig)
+        pyplot.close(fig)
+
+        if sim.end:
+            break
 
     print('done')
     print()
