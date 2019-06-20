@@ -1,4 +1,5 @@
 from collections import defaultdict
+import copy
 import matplotlib.patches as patches
 import matplotlib.pyplot as pyplot
 import numpy as np
@@ -63,12 +64,14 @@ def filter_element_update(key, element, prior, advance, control, observation):
 
         if key in observation.keys():
             posterior[s_t] *= observation_probability(element, s_t, observation[key])
+        # else:
+        #     posterior[s_t] *= (1/len(element.state_space))
 
     posterior /= np.sum(posterior)
     return posterior
 
 
-def create_image(simulation, position, dim=(5, 5), uncertainty=False):
+def create_image(simulation, position, dim=(3, 3), uncertainty=False):
     state = simulation.dense_state()
     r0, c0 = xy_to_rc(state.shape[0], position)
     image = np.zeros(dim).astype(np.int8)
@@ -108,11 +111,11 @@ def rc_to_xy(y_limit, rc):
 
 
 def x_to_col(x):
-    return np.rint((1/1)*x).astype(np.int8)
+    return np.floor(x).astype(np.int8)
 
 
 def y_to_row(y_limit, y):
-    return np.rint(y_limit-1-1*y).astype(np.int8)
+    return np.ceil(y_limit-1-y).astype(np.int8)
 
 
 def xy_to_rc(y_limit, xy):
@@ -193,14 +196,70 @@ def actions2trajectory(position, actions):
     return trajectory
 
 
+def get_score(position, ent, sim_dims, hist=None, counter=1):
+    if hist is None:
+        hist = dict()
+
+    scores = np.zeros(9)
+    for a in range(9):
+        new_position = actions2trajectory(position, [a])[-1]
+        new_position_rc = xy_to_rc(sim_dims[1], new_position)
+
+        if not (0 <= new_position_rc[0] < sim.dims[0] and 0 <= new_position_rc[1] < sim.dims[1]):
+            continue
+
+        if counter == 1:
+            scores[a] = ent[new_position_rc]
+        else:
+            # if new_position not in hist.keys():
+            hist = get_score(new_position, ent, sim_dims, hist, counter-1)
+            scores[a] = hist[tuple(new_position)][1] + ent[new_position_rc]
+
+    best_action = np.argmax(scores)
+    best_score = scores[best_action]
+    hist[tuple(position)] = (best_action, best_score)
+
+    return hist
+
+    # if counter == 1:
+    #     scores = np.zeros(9)
+    #     for a in range(9):
+    #         new_position = actions2trajectory(position, [a])[-1]
+    #         new_position_rc = xy_to_rc(sim_dims[1], new_position)
+    #         if 0 <= new_position_rc[0] < sim.dims[0] and 0 <= new_position_rc[1] < sim.dims[1]:
+    #             scores[a] = ent[new_position_rc]
+    #     best_action = np.argmax(scores)
+    #     best_score = scores[best_action]
+    #     hist[tuple(position)] = (best_action, best_score)
+    #
+    #     return hist
+    #
+    # else:
+    #     scores = np.zeros(9)
+    #     for a in range(9):
+    #         new_position = actions2trajectory(position, [a])[-1]
+    #         if new_position not in hist.keys():
+    #             hist = get_score(new_position, ent, sim_dims, hist, counter-1)
+    #         new_position_rc = xy_to_rc(sim_dims[1], new_position)
+    #         scores[a] = hist[tuple(new_position)][1] + ent[new_position_rc]
+    #     best_action = np.argmax(scores)
+    #     best_score = scores[best_action]
+    #     hist[tuple(position)] = (best_action, best_score)
+    #
+    #     return hist
+
+
 if __name__ == '__main__':
     # agent_position = np.array([10.25, 9.25])
+    seed = 0
+    np.random.seed(seed)
+
     agent_position = np.array([21.5, 3.5])
     agent_time = 0
 
     dimension = 25
     urban_width = 10
-    sim = UrbanForest(dimension, urban_width)
+    sim = UrbanForest(dimension, urban_width, rng=seed)
     control = defaultdict(lambda: (0, 0))
 
     belief = dict()
@@ -210,19 +269,19 @@ if __name__ == '__main__':
         # belief[key][element.state] = 1
     agent_filter = ApproxFilter(belief)
 
-    folder = 'sim_images/single_agent_2/'
+    folder = 'sim_images/single_agent_2_3/'
 
-    for agent_iteration in range(20):
+    for agent_iteration in range(100):
         img, obs, _ = create_image(sim, agent_position, uncertainty=True)
 
-        fig = pyplot.figure(1)
-        ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
-        ax1.set_xlim(0, 25)
-        ax1.set_ylim(0, 25)
-
-        # plot forest and agent position
-        ax1 = PlotForest(sim.dense_state(), ax1)
-        ax1.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=2, color='blue')
+        # fig = pyplot.figure(1)
+        # ax1 = fig.add_subplot(121, aspect='equal', adjustable='box')
+        # ax1.set_xlim(0, 25)
+        # ax1.set_ylim(0, 25)
+        # ax2 = fig.add_subplot(122, aspect='equal', adjustable='box')
+        #
+        # ax1 = PlotForest(sim.dense_state(), ax1)
+        # ax1.plot(agent_position[0], agent_position[1], linestyle='', Marker='.', MarkerSize=2, color='blue')
 
         update = False
         if (agent_iteration+1) % 5 == 0:
@@ -238,23 +297,33 @@ if __name__ == '__main__':
         for key in belief.keys():
             entropy_matrix[key[0], key[1]] = entropy[key]
 
+        # i = ax2.imshow(entropy_matrix, vmin=0, vmax=2, extent=[0, sim.dims[0], 0, sim.dims[1]])
+        # ax2.set_xticks(np.arange(0, sim.dims[0]+1, 1))
+        # ax2.set_yticks(np.arange(0, sim.dims[1]+1, 1))
+        # ax2.grid()
+        # fig.colorbar(i, ax=ax2)
+
         weights = np.ones_like(img)
         entropy_map = sn.filters.convolve(entropy_matrix, weights, mode='constant', cval=0)
 
-        scores = np.zeros(9)
-        for a in range(9):
-            new_position = actions2trajectory(agent_position, [a])[-1]
-            new_position_rc = xy_to_rc(sim.dims[1], new_position)
-            scores[a] = entropy_map[new_position_rc]
+        # scores = np.zeros(9)
+        # for a in range(9):
+        #     new_position = actions2trajectory(agent_position, [a])[-1]
+        #     new_position_rc = xy_to_rc(sim.dims[1], new_position)
+        #     scores[a] = entropy_map[new_position_rc]
+        # best_action = np.argmax(scores)
 
-        best_action = np.argmax(scores)
+        hist = get_score(agent_position, entropy_map, sim.dims, counter=4)
+        best_action, best_score = hist[tuple(agent_position)]
 
-        agent_position = actions2trajectory(agent_position, [best_action])[-1]
+        agent_position_next = actions2trajectory(agent_position, [best_action])[-1]
+        agent_position = np.asarray(agent_position_next)
 
         filename = folder + 'iteration' + str(agent_iteration+1).zfill(3) + '.png'
-        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
         # pyplot.show()
-        pyplot.close(fig)
+        # pyplot.close(fig)
 
+    print('done')
     print()
