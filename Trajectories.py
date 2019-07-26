@@ -127,8 +127,8 @@ def graph_search(w, start, goal):
     while not frontier.empty():
         current = frontier.get()[1]
 
-        if current == goal:
-            break
+        # if current == goal:
+        #     break
 
         neighbors = []
         current_dist = np.linalg.norm(np.asarray(current) - np.asarray(goal), ord=np.inf)
@@ -279,6 +279,13 @@ if __name__ == '__main__':
     path2.reverse()
     actions2.reverse()
     print(path2)
+
+    cond_entropy_matrix_next = np.pad(cond_entropy_matrix_next, (2, 2), 'constant', constant_values=(0, 0))
+    for loc in path2:
+        coeff = np.zeros_like(cond_entropy_matrix_next)
+        coeff[2+loc[0]-1:2+loc[0]+1+1, 2+loc[1]-1:2+loc[1]+1+1] = fov
+        cond_entropy_matrix_next -= coeff*cond_entropy_matrix_next
+    cond_entropy_matrix_next = cond_entropy_matrix_next[2:-2, 2:-2]
 
     print('done')
     print()
