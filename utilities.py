@@ -28,9 +28,19 @@ def xy_to_rc(y_limit, xy):
 class Config(object):
 
     def __init__(self):
+        self.dimension = 25
+
+        self.cell_side_length = 0.5
+
+        cx = np.linspace(0, self.dimension-1, self.dimension) + 0.5
+        cy = np.linspace(0, self.dimension-1, self.dimension) + 0.5
+        Cx, Cy = np.meshgrid(cx, cy)
+        self.Cxy = np.stack([Cx, Cy], axis=2) # .reshape((self.dimension*self.dimension, 2))
+
         self.team_size = 4
         self.image_size = (3, 3)
 
-        self.deploy_interval = 2
-        self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
+        # self.deploy_interval = 2
+        # self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
         self.meeting_interval = 10
+        self.total_interval = None
