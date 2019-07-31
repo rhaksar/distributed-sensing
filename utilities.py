@@ -29,6 +29,7 @@ class Config(object):
 
     def __init__(self):
         self.dimension = 25
+        self.process_update = 5
 
         self.cell_side_length = 0.5
 

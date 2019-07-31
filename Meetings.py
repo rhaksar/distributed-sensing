@@ -4,7 +4,7 @@ import os
 import sys
 
 from filter import merge_beliefs
-from scheduling import set_initial_meetings, set_next_meeting
+from scheduling import set_initial_meetings, set_next_meeting, create_joint_plan
 from uav import UAV
 from utilities import Config
 
@@ -41,7 +41,7 @@ if __name__ == '__main__':
     # team[1].meetings.append((settings.team_size, None))
     # team[settings.team_size].meetings.append((1, None))
 
-    schedule = [[]]*2
+    schedule = [[], []]
     settings.total_interval = 2*settings.meeting_interval
     for i in range(1, 2*np.floor(settings.team_size/2).astype(int)-1+1, 2):
         schedule[0].append((i, i+1))
@@ -54,10 +54,18 @@ if __name__ == '__main__':
         for idx in schedule[0][i]:
             team[idx].position = position
 
+    for agent in team.values():
+        offset = len(schedule[0])+1
+        if agent.position is None:
+            idx = np.unravel_index(offset, (square_size, square_size), order='C')
+            agent.position = corner + 0.5*np.asarray(idx[::-1])
+            offset += 1
+
     for i in range(2, 2*(np.floor(settings.team_size/2).astype(int)-1)+1, 2):
         schedule[1].append((i, i+1))
     schedule[1].append((1, settings.team_size)) if settings.team_size%2==0 \
         else schedule[1].append((settings.team_size-1, settings.team_size))
+
     set_initial_meetings(team, schedule, settings)
     next_set = 1
 
@@ -72,9 +80,10 @@ if __name__ == '__main__':
 
             for meeting in schedule[next_set]:
                 sub_team = [team[i] for i in meeting]
-                merge_beliefs(sub_team)
 
-                set_next_meeting(sub_team)
+                merge_beliefs(sub_team)
+                set_next_meeting(sub_team, sim.group, settings)
+                # create_joint_plan(sub_team)
 
             next_set = 0 if next_set>=len(schedule) else next_set+1
 
