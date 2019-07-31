@@ -62,6 +62,7 @@ def filter_element_update(key, element, prior, advance, control, observation):
             else:
                 posterior[s_t] += (s_t == s_tm1)*prior[key][s_tm1]
 
+    for s_t in element.state_space:
         if key in observation.keys():
             posterior[s_t] *= observation_probability(element, s_t, observation[key])
         else:
