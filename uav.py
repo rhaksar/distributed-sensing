@@ -2,8 +2,8 @@ import numpy as np
 
 class UAV(object):
 
-    def __init__(self, id=None, position=None, belief=None, image_size=None):
-        self.id = id
+    def __init__(self, label=None, position=None, belief=None, image_size=None):
+        self.label = label
         # self.deployed = False
         self.time = 1
 
@@ -12,7 +12,7 @@ class UAV(object):
 
         self.image_size = image_size
         self.belief = belief
-        self.MImetric = None
+        # self.MImetric = None
 
         self.meetings = []
 
