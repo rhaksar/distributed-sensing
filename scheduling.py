@@ -9,36 +9,71 @@ from filter import update_belief, measure_model
 from utilities import rc_to_xy, xy_to_rc
 
 
-def set_initial_meetings(team, schedule, config):
-    taken_positions = []
-    for meeting in schedule[1]:
-        distances = np.maximum.reduce([np.linalg.norm(config.Cxy-team[i].position, ord=np.inf, axis=2)
-                                       for i in meeting])
-        distances[distances > 1*config.meeting_interval] = 0
-        for (r, c) in taken_positions:
-            distances[r, c] = 0
+# def set_initial_meetings(team, schedule, config):
+#     taken_positions = []
+#     for meeting in schedule[1]:
+#         distances = np.maximum.reduce([np.linalg.norm(config.Cxy-team[i].position, ord=np.inf, axis=2)
+#                                        for i in meeting])
+#         distances[distances > 1*config.meeting_interval] = 0
+#         for (r, c) in taken_positions:
+#             distances[r, c] = 0
+#
+#         meet_position_rc = np.unravel_index(distances.argmax(), distances.shape)
+#         meet_position = config.Cxy[meet_position_rc[0], meet_position_rc[1], :]
+#         # meet_position = np.asarray(rc_to_xy(config.dimension, meet_position_rc)) + config.cell_side_length
+#         [team[i].meetings.append([meet_position, config.meeting_interval]) for i in meeting]
+#
+#         taken_positions.append(meet_position_rc)
+#         half_row = (config.image_size[0]-1)//2
+#         half_col = (config.image_size[1]-1)//2
+#         for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
+#             for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
+#                 r = meet_position_rc[0] + dr
+#                 c = meet_position_rc[1] + dc
+#
+#                 if 0 <= r < config.dimension and 0 <= c < config.dimension:
+#                     taken_positions.append((r, c))
+#
+#     return
 
-        meet_position_rc = np.unravel_index(distances.argmax(), distances.shape)
-        meet_position = np.asarray(rc_to_xy(config.dimension, meet_position_rc)) + config.cell_side_length
-        [team[i].meetings.append([meet_position, config.meeting_interval]) for i in meeting]
+def set_initial_meetings(team, schedule, simulation_group, config):
+    predicted_belief = copy(team[1].belief)
+    entropy = np.zeros((config.dimension, config.dimension))
+    for key in predicted_belief.keys():
+        entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
+    weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
 
-        taken_positions.append(meet_position_rc)
-        half_row = (config.image_size[0]-1)//2
-        half_col = (config.image_size[1]-1)//2
-        for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
-            for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
-                r = meet_position_rc[0] + dr
-                c = meet_position_rc[1] + dc
+    half_row = (config.image_size[0]-1)//2
+    half_col = (config.image_size[1]-1)//2
+    for i in range(1, len(schedule)):
 
-                if 0 <= r < config.dimension and 0 <= c < config.dimension:
-                    taken_positions.append((r, c))
+        for idx, meeting in enumerate(schedule[i]):
+            last_positions = []
+            for label in meeting:
+                last_positions.append(team[label].meetings[i-1][0])  # this might error, need to fix
+            distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
+                                           for i in range(len(last_positions))])
+            meeting_r, meeting_c = np.where(distances == config.meeting_interval)
+            if (idx+1)%2 == 0:
+                meeting_r, meeting_c = np.flip(meeting_r), np.flip(meeting_c)
+            options = [(weights[r, c], (r, c)) for (r, c) in zip(meeting_r, meeting_c)]
+            best_option = max(options, key=itemgetter(0))[1]
+            [team[label].meetings.append((best_option, config.meeting_interval)) for label in meeting]
+
+            for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
+                for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
+                    r = best_option[0] + dr
+                    c = best_option[1] + dc
+
+                    if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                        weights[r, c] = 0
 
     return
 
 
 def set_next_meeting(sub_team, simulation_group, config):
     predicted_belief = copy(sub_team[0].belief)
-    belief_updates = (config.total_interval-config.meeting_interval)//config.process_update
+    belief_updates = (config.total_interval-config.meeting_interval)//config.estimate_process_update
     for _ in range(belief_updates):
         predicted_belief = update_belief(simulation_group, predicted_belief, True, dict())
 
@@ -56,25 +91,26 @@ def set_next_meeting(sub_team, simulation_group, config):
 
     last_positions = []
     for agent in sub_team:
-        if not agent.meetings:
-            continue
+        # if not agent.meetings:
+        #     continue
         last_positions.append(agent.meetings[-1][0])
 
-    distances = np.maximum.reduce([np.linalg.norm(config.Cxy - last_positions[i], ord=np.inf, axis=2)
+    distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
                                    for i in range(len(last_positions))])
     meeting_r, meeting_c = np.where(distances == config.meeting_interval)
     options = []
     for (m_r, m_c) in zip(meeting_r, meeting_c):
-        end = xy_to_rc(config.dimension, config.Cxy[m_r, m_c])
+        # end = xy_to_rc(config.dimension, config.Cxy[m_r, m_c])
+        end = (m_r, m_c)
         score = 0
         for position in last_positions:
-            position_rc = xy_to_rc(config.dimension, position)
-            _, cost_so_far = graph_search((position_rc, config.meeting_interval), end, -weights, config)
+            # position_rc = xy_to_rc(config.dimension, position)
+            _, cost_so_far = graph_search((position, config.meeting_interval), end, -weights, config)
             score += cost_so_far[(end, 0)]
         score /= len(last_positions)
         options.append((score, end))
-    best_option_rc = min(options, key=itemgetter(0))[1]
-    best_option = np.asarray(rc_to_xy(config.dimension, best_option_rc)) + config.cell_side_length
+    best_option = min(options, key=itemgetter(0))[1]
+    # best_option = np.asarray(rc_to_xy(config.dimension, best_option_rc)) + config.cell_side_length
     [agent.meetings.append([best_option, config.meeting_interval]) for agent in sub_team]
 
     # distances[distances != config.meeting_interval] = -1
@@ -113,16 +149,18 @@ def create_joint_plan(sub_team, simulation_group, config):
     plans = dict()
     for agent in sub_team:
         plans[agent.label] = []
-        start = xy_to_rc(config.dimension, agent.position)
+        # start = xy_to_rc(config.dimension, agent.position)
+        start = agent.position
 
         for meeting in agent.meetings:
-            end = xy_to_rc(config.dimension, meeting[0])
-            came_from, _ = graph_search(start, end, weights, config)
+            # end = xy_to_rc(config.dimension, meeting[0])
+            end = meeting[0]
+            came_from, _ = graph_search((start, config.meeting_interval), end, -weights, config)
             sub_path = [end]
-            current = end
-            while came_from[current] != start:
+            current = (end, 0)
+            while came_from[current][0] != start:
                 previous = came_from[current]
-                sub_path.insert(0, previous)
+                sub_path.insert(0, previous[0])
                 current = previous
 
             conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
@@ -139,7 +177,13 @@ def create_joint_plan(sub_team, simulation_group, config):
             weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
             plans[agent.label].extend(sub_path)
-            print()
+            start = end
+
+    for agent in sub_team:
+        agent.other_plans = copy(plans)
+        agent.other_plans.pop(agent.label)
+
+    return
 
 
 def graph_search(start, end, weights, config):

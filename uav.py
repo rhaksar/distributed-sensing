@@ -15,6 +15,7 @@ class UAV(object):
         # self.MImetric = None
 
         self.meetings = []
+        self.other_plans = dict()
 
     # def deploy(self, time, config):
     #     if self.deployed:
