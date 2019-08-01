@@ -49,7 +49,10 @@ def set_initial_meetings(team, schedule, simulation_group, config):
         for idx, meeting in enumerate(schedule[i]):
             last_positions = []
             for label in meeting:
-                last_positions.append(team[label].meetings[i-1][0])  # this might error, need to fix
+                if not team[label].meetings:
+                    last_positions.append(team[label].position)
+                else:
+                    last_positions.append(team[label].meetings[i-1][0])  # this might error, need to fix
             distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
                                            for i in range(len(last_positions))])
             meeting_r, meeting_c = np.where(distances == config.meeting_interval)
@@ -83,16 +86,38 @@ def set_next_meeting(sub_team, simulation_group, config):
     #         advance = True
     #     predicted_belief = update_belief(simulation_group, predicted_belief, advance, dict())
 
-    entropy = np.zeros((config.dimension, config.dimension))
+    # entropy = np.zeros((config.dimension, config.dimension))
+    # for key in predicted_belief.keys():
+    #     entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
+
+    conditional_entropy = np.zeros((config.dimension, config.dimension))
     for key in predicted_belief.keys():
-        entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
-    weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
+        element = simulation_group[key]
+        p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
+                              for yi in element.state_space])
+        p_yi = np.matmul(p_yi_ci, predicted_belief[key])
+        for yi in element.state_space:
+            if p_yi[yi] <= 1e-100:
+                continue
+            for ci in element.state_space:
+                if predicted_belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+                    continue
+                conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*\
+                                                       predicted_belief[key][ci]*\
+                                                       (np.log(p_yi_ci[yi, ci])
+                                                        + np.log(predicted_belief[key][ci])
+                                                        - np.log(p_yi[yi]))
+
+    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     last_positions = []
     for agent in sub_team:
         # if not agent.meetings:
         #     continue
-        last_positions.append(agent.meetings[-1][0])  # this might error, need to fix
+        if not agent.meetings:
+            last_positions.append(agent.position)
+        else:
+            last_positions.append(agent.meetings[-1][0])  # this might error, need to fix
 
     distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
                                    for i in range(len(last_positions))])
@@ -110,7 +135,12 @@ def set_next_meeting(sub_team, simulation_group, config):
         options.append((score, end))
     best_option = min(options, key=itemgetter(0))[1]
     # best_option = np.asarray(rc_to_xy(config.dimension, best_option_rc)) + config.cell_side_length
-    [agent.meetings.append([best_option, config.meeting_interval]) for agent in sub_team]
+    for agent in sub_team:
+        if not agent.meetings:
+            agent.meetings.append([best_option, config.total_interval])
+        else:
+            agent.meetings.append([best_option, config.meeting_interval])
+    # [agent.meetings.append([best_option, config.meeting_interval]) for agent in sub_team]
 
     # distances[distances != config.meeting_interval] = -1
     # weights = np.multiply(entropy, distances)
@@ -129,7 +159,11 @@ def create_solo_plan(uav, simulation_group, config):
                               for yi in element.state_space])
         p_yi = np.matmul(p_yi_ci, belief[key])
         for yi in element.state_space:
+            if p_yi[yi] <= 1e-100:
+                continue
             for ci in element.state_space:
+                if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+                    continue
                 conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
                                                                                         + np.log(belief[key][ci])
                                                                                         - np.log(p_yi[yi]))
@@ -140,6 +174,8 @@ def create_solo_plan(uav, simulation_group, config):
     for other_label in uav.other_plans.keys():
         # if other_label > uav.label:
         #     continue
+        if not uav.other_plans[other_label]:
+            continue
         location = uav.other_plans[other_label].pop(0)
 
         coeff = np.zeros_like(conditional_entropy)
@@ -181,7 +217,11 @@ def create_joint_plan(sub_team, simulation_group, config):
                               for yi in element.state_space])
         p_yi = np.matmul(p_yi_ci, belief[key])
         for yi in element.state_space:
+            if p_yi[yi] <= 1e-100:
+                continue
             for ci in element.state_space:
+                if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+                    continue
                 conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
                                                                                         + np.log(belief[key][ci])
                                                                                         - np.log(p_yi[yi]))
