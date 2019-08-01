@@ -4,7 +4,7 @@ import os
 import sys
 
 from filter import merge_beliefs, update_belief, get_image
-from scheduling import set_initial_meetings, set_next_meeting, create_joint_plan, move
+from scheduling import set_initial_meetings, set_next_meeting, create_joint_plan, create_solo_plan
 from uav import UAV
 from utilities import Config, xy_to_rc
 
@@ -74,10 +74,13 @@ if __name__ == '__main__':
     #     set_next_meeting(sub_team, sim.group, settings)
     # set_initial_meetings(team, schedule, settings)
     set_initial_meetings(team, schedule, sim.group, settings)
+    for meeting in schedule[1]:
+        sub_team = [team[i] for i in meeting]
+        create_joint_plan(sub_team, sim.group, settings)
     next_meetings = 0
 
     # main loop
-    for t in range(1, 2):
+    for t in range(1, 7):
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
 
@@ -110,20 +113,22 @@ if __name__ == '__main__':
 
         # update agent position
         for agent in team.values():
-            move(agent, sim.group, settings)
-            agent.position = agent.next_position
-            agent.next_position = None
+            # move(agent, sim.group, settings)
+            # agent.position = agent.next_position
+            # agent.next_position = None
+            path = create_solo_plan(agent, sim.group, settings)
+            agent.position = path[0]
         # [move(agent, sim.group, settings) for agent in team.values()]
 
         # update simulator if necessary
-        if t%settings.true_process_update==0:
+        if t>1 and (t-1)%settings.true_process_update==0:
             sim.update()
 
         # update agent belief
         for agent in team.values():
             _, observation = get_image(agent, sim, settings)
             advance = False
-            if t%settings.estimate_process_update==0:
+            if t>1 and (t-1)%settings.estimate_process_update==0:
                 advance = True
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, control=None)
 
