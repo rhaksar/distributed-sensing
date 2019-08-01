@@ -140,6 +140,8 @@ def move(uav, simulation_group, config):
     half_col = config.image_size[1]//2
     conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
     for other_label in uav.other_plans.keys():
+        if other_label > uav.label:
+            continue
         location = uav.other_plans[other_label].pop(0)
 
         coeff = np.zeros_like(conditional_entropy)
@@ -188,7 +190,9 @@ def create_joint_plan(sub_team, simulation_group, config):
     half_row = config.image_size[0]//2
     half_col = config.image_size[1]//2
     plans = dict()
-    for agent in sub_team:
+    agent_labels = [(agent.label, agent) for agent in sub_team]
+    agent_labels.sort(key=itemgetter(0))
+    for (label, agent) in agent_labels:
         plans[agent.label] = []
         # start = xy_to_rc(config.dimension, agent.position)
         start = agent.position
