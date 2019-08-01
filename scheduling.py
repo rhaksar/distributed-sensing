@@ -6,7 +6,6 @@ import scipy.ndimage as sn
 import scipy.stats as ss
 
 from filter import update_belief, measure_model
-from utilities import rc_to_xy, xy_to_rc
 
 
 # def set_initial_meetings(team, schedule, config):
@@ -41,12 +40,12 @@ def set_initial_meetings(team, schedule, simulation_group, config):
     entropy = np.zeros((config.dimension, config.dimension))
     for key in predicted_belief.keys():
         entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
-    weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     half_row = (config.image_size[0]-1)//2
     half_col = (config.image_size[1]-1)//2
     for i in range(1, len(schedule)):
 
+        weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
         for idx, meeting in enumerate(schedule[i]):
             last_positions = []
             for label in meeting:
@@ -66,7 +65,7 @@ def set_initial_meetings(team, schedule, simulation_group, config):
                     c = best_option[1] + dc
 
                     if 0 <= r < config.dimension and 0 <= c < config.dimension:
-                        weights[r, c] = 0
+                        entropy[r, c] = 0
 
     return
 
@@ -93,7 +92,7 @@ def set_next_meeting(sub_team, simulation_group, config):
     for agent in sub_team:
         # if not agent.meetings:
         #     continue
-        last_positions.append(agent.meetings[-1][0])
+        last_positions.append(agent.meetings[-1][0])  # this might error, need to fix
 
     distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
                                    for i in range(len(last_positions))])
@@ -118,11 +117,10 @@ def set_next_meeting(sub_team, simulation_group, config):
     # meet_position_rc = np.unravel_index(weights.argmax(), weights.shape)
     # meet_position = np.asarray(rc_to_xy(config.dimension, meet_position_rc)) + config.cell_side_length
     # [agent.meetings.append([meet_position, config.meeting_interval]) for agent in sub_team]
-
     return
 
 
-def move(uav, simulation_group, config):
+def create_solo_plan(uav, simulation_group, config):
     belief = uav.belief
     conditional_entropy = np.zeros((config.dimension, config.dimension))
     for key in belief.keys():
@@ -140,8 +138,8 @@ def move(uav, simulation_group, config):
     half_col = config.image_size[1]//2
     conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
     for other_label in uav.other_plans.keys():
-        if other_label > uav.label:
-            continue
+        # if other_label > uav.label:
+        #     continue
         location = uav.other_plans[other_label].pop(0)
 
         coeff = np.zeros_like(conditional_entropy)
@@ -158,15 +156,17 @@ def move(uav, simulation_group, config):
 
     came_from, _ = graph_search((uav.position, uav.meetings[0][1]), uav.meetings[0][0], -weights, config)
     actions = []
+    path = [uav.meetings[0][0]]
     current = (uav.meetings[0][0], 0)
     while came_from[current][0] != uav.position:
         previous = came_from[current]
+        path.insert(0, previous[0])
         actions.insert(0, (current[0][0]-previous[0][0], current[0][1]-previous[0][1]))
         current = previous
 
-    uav.meetings[0][1] -= 1
-    uav.next_position = (uav.position[0]+actions[0][0], uav.position[1]+actions[0][1])
-    return
+    # uav.meetings[0][1] -= 1
+    # uav.next_position = (uav.position[0]+actions[0][0], uav.position[1]+actions[0][1])
+    return path
 
 
 def create_joint_plan(sub_team, simulation_group, config):
@@ -225,8 +225,12 @@ def create_joint_plan(sub_team, simulation_group, config):
             start = end
 
     for agent in sub_team:
-        agent.other_plans = copy(plans)
-        agent.other_plans.pop(agent.label)
+        for label in plans.keys():
+            if label == agent.label:
+                continue
+            agent.other_plans[label] = copy(plans[label])
+        # agent.other_plans = copy(plans)
+        # agent.other_plans.pop(agent.label)
 
     return
 
