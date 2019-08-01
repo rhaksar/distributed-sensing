@@ -26,8 +26,30 @@ def multiply_probabilities(values):
             return np.exp(sum_log)
 
 
-def image():
-    pass
+def get_image(uav, simulation, config, uncertainty=True):
+    state = simulation.dense_state()
+    r0, c0 = uav.position
+    image = np.zeros(config.image_size).astype(np.int8)
+    observation = dict()
+
+    half_row = (config.image_size[0]-1)//2
+    half_col = (config.image_size[1] - 1)//2
+    for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
+        for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
+            r = r0 + dr
+            c = c0 + dc
+
+            if 0 <= r < state.shape[0] and 0 <= c < state.shape[1]:
+                if not uncertainty:
+                    image[ri, ci] = state[r, c]
+                else:
+                    element = simulation.group[(r, c)]
+                    probs = [measure_model(element, element.state, o) for o in element.state_space]
+                    obs = np.random.choice(element.state_space, p=probs)
+                    observation[(r, c)] = obs
+                    image[ri, ci] = obs
+
+    return image, observation
 
 
 def merge_beliefs(sub_team):

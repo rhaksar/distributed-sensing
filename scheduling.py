@@ -58,7 +58,7 @@ def set_initial_meetings(team, schedule, simulation_group, config):
                 meeting_r, meeting_c = np.flip(meeting_r), np.flip(meeting_c)
             options = [(weights[r, c], (r, c)) for (r, c) in zip(meeting_r, meeting_c)]
             best_option = max(options, key=itemgetter(0))[1]
-            [team[label].meetings.append((best_option, config.meeting_interval)) for label in meeting]
+            [team[label].meetings.append([best_option, config.meeting_interval]) for label in meeting]
 
             for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
                 for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
@@ -122,8 +122,49 @@ def set_next_meeting(sub_team, simulation_group, config):
     return
 
 
-def create_solo_plan(uav):
-    pass
+def move(uav, simulation_group, config):
+    belief = uav.belief
+    conditional_entropy = np.zeros((config.dimension, config.dimension))
+    for key in belief.keys():
+        element = simulation_group[key]
+        p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
+                              for yi in element.state_space])
+        p_yi = np.matmul(p_yi_ci, belief[key])
+        for yi in element.state_space:
+            for ci in element.state_space:
+                conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
+                                                                                        + np.log(belief[key][ci])
+                                                                                        - np.log(p_yi[yi]))
+
+    half_row = config.image_size[0]//2
+    half_col = config.image_size[1]//2
+    conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
+    for other_label in uav.other_plans.keys():
+        location = uav.other_plans[other_label].pop(0)
+
+        coeff = np.zeros_like(conditional_entropy)
+        row_start = config.image_size[0]+location[0]-half_row
+        row_end = config.image_size[0]+location[0]+half_row+1
+        col_start = config.image_size[1]+location[1]-half_col
+        col_end = config.image_size[1]+location[1]+half_col+1
+        coeff[row_start:row_end, col_start:col_end] = np.ones(config.image_size)
+        conditional_entropy -= coeff*conditional_entropy
+
+    conditional_entropy = conditional_entropy[config.image_size[0]:-config.image_size[0],
+                                              config.image_size[1]:-config.image_size[1]]
+    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+
+    came_from, _ = graph_search((uav.position, uav.meetings[0][1]), uav.meetings[0][0], -weights, config)
+    actions = []
+    current = (uav.meetings[0][0], 0)
+    while came_from[current][0] != uav.position:
+        previous = came_from[current]
+        actions.insert(0, (current[0][0]-previous[0][0], current[0][1]-previous[0][1]))
+        current = previous
+
+    uav.meetings[0][1] -= 1
+    uav.next_position = (uav.position[0]+actions[0][0], uav.position[1]+actions[0][1])
+    return
 
 
 def create_joint_plan(sub_team, simulation_group, config):
