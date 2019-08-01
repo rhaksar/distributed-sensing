@@ -4,8 +4,8 @@ import numpy as np
 import time
 
 
-def measure_model(element, state, observation):
-    measure_correct = 0.8
+def measure_model(element, state, observation, config):
+    measure_correct = config.measure_correct
     measure_wrong = (1/(len(element.state_space)-1))*(1-measure_correct)
 
     if state != observation:
@@ -44,7 +44,7 @@ def get_image(uav, simulation, config, uncertainty=True):
                     image[ri, ci] = state[r, c]
                 else:
                     element = simulation.group[(r, c)]
-                    probs = [measure_model(element, element.state, o) for o in element.state_space]
+                    probs = [measure_model(element, element.state, o, config) for o in element.state_space]
                     obs = np.random.choice(element.state_space, p=probs)
                     observation[(r, c)] = obs
                     image[ri, ci] = obs
@@ -63,7 +63,7 @@ def merge_beliefs(sub_team):
     return
 
 
-def update_belief(simulation_group, prior, advance, observation, control=None):
+def update_belief(simulation_group, prior, advance, observation, config, control=None):
     if control is None:
         control = defaultdict(lambda: (0, 0))
 
@@ -103,7 +103,7 @@ def update_belief(simulation_group, prior, advance, observation, control=None):
 
         for x_t in element.state_space:
             if key in observation.keys():
-                element_posterior[x_t] *= measure_model(element, x_t, observation[key])
+                element_posterior[x_t] *= measure_model(element, x_t, observation[key], config)
             else:
                 weight = 0.01
                 mean = np.mean(element_posterior)
