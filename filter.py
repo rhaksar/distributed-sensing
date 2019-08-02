@@ -105,7 +105,7 @@ def update_belief(simulation_group, prior, advance, observation, config, control
             if key in observation.keys():
                 element_posterior[x_t] *= measure_model(element, x_t, observation[key], config)
             elif advance:
-                weight = 0.01
+                weight = config.regularization_weight
                 mean = np.mean(element_posterior)
                 element_posterior = [v - weight*np.sign(v-mean)*np.abs(v-mean) for v in element_posterior]
 
