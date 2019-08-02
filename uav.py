@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class UAV(object):
 
     def __init__(self, label=None, position=None, belief=None, image_size=None):
@@ -15,6 +16,7 @@ class UAV(object):
         # self.MImetric = None
 
         self.meetings = []
+        self.plan = []
         self.other_plans = dict()
 
     # def deploy(self, time, config):
@@ -27,6 +29,3 @@ class UAV(object):
     #         self.deployed = True
     #
     #     return
-
-    # def update_belief(self):
-    #     pass
