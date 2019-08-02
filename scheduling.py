@@ -35,7 +35,7 @@ from filter import update_belief, measure_model
 #
 #     return
 
-def set_initial_meetings(team, schedule, simulation_group, config):
+def set_initial_meetings(team, schedule, config):
     predicted_belief = copy(team[1].belief)
     entropy = np.zeros((config.dimension, config.dimension))
     for key in predicted_belief.keys():
@@ -77,7 +77,7 @@ def set_next_meeting(sub_team, simulation_group, config):
     predicted_belief = copy(sub_team[0].belief)
     belief_updates = (config.total_interval-config.meeting_interval)//config.estimate_process_update
     for _ in range(belief_updates):
-        predicted_belief = update_belief(simulation_group, predicted_belief, True, dict())
+        predicted_belief = update_belief(simulation_group, predicted_belief, True, dict(), config)
 
     # current_time = sub_team[0].time
     # for t in range(config.total_interval-config.meeting_interval):
@@ -90,24 +90,25 @@ def set_next_meeting(sub_team, simulation_group, config):
     # for key in predicted_belief.keys():
     #     entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
 
-    conditional_entropy = np.zeros((config.dimension, config.dimension))
-    for key in predicted_belief.keys():
-        element = simulation_group[key]
-        p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
-                              for yi in element.state_space])
-        p_yi = np.matmul(p_yi_ci, predicted_belief[key])
-        for yi in element.state_space:
-            if p_yi[yi] <= 1e-100:
-                continue
-            for ci in element.state_space:
-                if predicted_belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
-                    continue
-                conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*\
-                                                       predicted_belief[key][ci]*\
-                                                       (np.log(p_yi_ci[yi, ci])
-                                                        + np.log(predicted_belief[key][ci])
-                                                        - np.log(p_yi[yi]))
+    # conditional_entropy = np.zeros((config.dimension, config.dimension))
+    # for key in predicted_belief.keys():
+    #     element = simulation_group[key]
+    #     p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
+    #                           for yi in element.state_space])
+    #     p_yi = np.matmul(p_yi_ci, predicted_belief[key])
+    #     for yi in element.state_space:
+    #         if p_yi[yi] <= 1e-100:
+    #             continue
+    #         for ci in element.state_space:
+    #             if predicted_belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+    #                 continue
+    #             conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*\
+    #                                                    predicted_belief[key][ci]*\
+    #                                                    (np.log(p_yi_ci[yi, ci])
+    #                                                     + np.log(predicted_belief[key][ci])
+    #                                                     - np.log(p_yi[yi]))
 
+    conditional_entropy = compute_conditional_entropy(predicted_belief, simulation_group, config)
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     last_positions = []
@@ -152,25 +153,27 @@ def set_next_meeting(sub_team, simulation_group, config):
 
 def create_solo_plan(uav, simulation_group, config):
     belief = uav.belief
-    conditional_entropy = np.zeros((config.dimension, config.dimension))
-    for key in belief.keys():
-        element = simulation_group[key]
-        p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
-                              for yi in element.state_space])
-        p_yi = np.matmul(p_yi_ci, belief[key])
-        for yi in element.state_space:
-            if p_yi[yi] <= 1e-100:
-                continue
-            for ci in element.state_space:
-                if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
-                    continue
-                conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
-                                                                                        + np.log(belief[key][ci])
-                                                                                        - np.log(p_yi[yi]))
+    # conditional_entropy = np.zeros((config.dimension, config.dimension))
+    # for key in belief.keys():
+    #     element = simulation_group[key]
+    #     p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
+    #                           for yi in element.state_space])
+    #     p_yi = np.matmul(p_yi_ci, belief[key])
+    #     for yi in element.state_space:
+    #         if p_yi[yi] <= 1e-100:
+    #             continue
+    #         for ci in element.state_space:
+    #             if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+    #                 continue
+    #             conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
+    #                                                                                     + np.log(belief[key][ci])
+    #                                                                                     - np.log(p_yi[yi]))
+
+    conditional_entropy = compute_conditional_entropy(belief, simulation_group, config)
 
     half_row = config.image_size[0]//2
     half_col = config.image_size[1]//2
-    conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
+    # conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
     for other_label in uav.other_plans.keys():
         # if other_label > uav.label:
         #     continue
@@ -178,16 +181,20 @@ def create_solo_plan(uav, simulation_group, config):
             continue
         location = uav.other_plans[other_label].pop(0)
 
-        coeff = np.zeros_like(conditional_entropy)
-        row_start = config.image_size[0]+location[0]-half_row
-        row_end = config.image_size[0]+location[0]+half_row+1
-        col_start = config.image_size[1]+location[1]-half_col
-        col_end = config.image_size[1]+location[1]+half_col+1
-        coeff[row_start:row_end, col_start:col_end] = np.ones(config.image_size)
-        conditional_entropy -= coeff*conditional_entropy
+        for (r, c) in zip(range(location[0]-half_row, location[0]+half_row+1),
+                          range(location[1]-half_col, location[1]+half_col+1)):
+            conditional_entropy[r, c] = 0
 
-    conditional_entropy = conditional_entropy[config.image_size[0]:-config.image_size[0],
-                                              config.image_size[1]:-config.image_size[1]]
+        # coeff = np.zeros_like(conditional_entropy)
+        # row_start = config.image_size[0]+location[0]-half_row
+        # row_end = config.image_size[0]+location[0]+half_row+1
+        # col_start = config.image_size[1]+location[1]-half_col
+        # col_end = config.image_size[1]+location[1]+half_col+1
+        # coeff[row_start:row_end, col_start:col_end] = np.ones(config.image_size)
+        # conditional_entropy -= coeff*conditional_entropy
+    # conditional_entropy = conditional_entropy[config.image_size[0]:-config.image_size[0],
+    #                                           config.image_size[1]:-config.image_size[1]]
+
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     came_from, _ = graph_search((uav.position, uav.meetings[0][1]), uav.meetings[0][0], -weights, config)
@@ -210,21 +217,22 @@ def create_joint_plan(sub_team, simulation_group, config):
     # entropy = np.zeros((config.dimension, config.dimension))
     # for key in belief.keys():
     #     entropy[key[0], key[1]] = ss.entropy(belief[key])
-    conditional_entropy = np.zeros((config.dimension, config.dimension))
-    for key in belief.keys():
-        element = simulation_group[key]
-        p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
-                              for yi in element.state_space])
-        p_yi = np.matmul(p_yi_ci, belief[key])
-        for yi in element.state_space:
-            if p_yi[yi] <= 1e-100:
-                continue
-            for ci in element.state_space:
-                if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
-                    continue
-                conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
-                                                                                        + np.log(belief[key][ci])
-                                                                                        - np.log(p_yi[yi]))
+    # conditional_entropy = np.zeros((config.dimension, config.dimension))
+    # for key in belief.keys():
+    #     element = simulation_group[key]
+    #     p_yi_ci = np.asarray([[measure_model(element, ci, yi) for ci in element.state_space]
+    #                           for yi in element.state_space])
+    #     p_yi = np.matmul(p_yi_ci, belief[key])
+    #     for yi in element.state_space:
+    #         if p_yi[yi] <= 1e-100:
+    #             continue
+    #         for ci in element.state_space:
+    #             if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+    #                 continue
+    #             conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci]*belief[key][ci]*(np.log(p_yi_ci[yi, ci])
+    #                                                                                     + np.log(belief[key][ci])
+    #                                                                                     - np.log(p_yi[yi]))
+    conditional_entropy = compute_conditional_entropy(belief, simulation_group, config)
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     half_row = config.image_size[0]//2
@@ -248,17 +256,23 @@ def create_joint_plan(sub_team, simulation_group, config):
                 sub_path.insert(0, previous[0])
                 current = previous
 
-            conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
+            # conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
+            # for location in sub_path:
+            #     coeff = np.zeros_like(conditional_entropy)
+            #     row_start = config.image_size[0]+location[0]-half_row
+            #     row_end = config.image_size[0]+location[0]+half_row+1
+            #     col_start = config.image_size[1]+location[1]-half_col
+            #     col_end = config.image_size[1]+location[1]+half_col+1
+            #     coeff[row_start:row_end, col_start:col_end] = np.ones(config.image_size)
+            #     conditional_entropy -= coeff*conditional_entropy
+            # conditional_entropy = conditional_entropy[config.image_size[0]:-config.image_size[0],
+            #                                           config.image_size[1]:-config.image_size[1]]
+
             for location in sub_path:
-                coeff = np.zeros_like(conditional_entropy)
-                row_start = config.image_size[0]+location[0]-half_row
-                row_end = config.image_size[0]+location[0]+half_row+1
-                col_start = config.image_size[1]+location[1]-half_col
-                col_end = config.image_size[1]+location[1]+half_col+1
-                coeff[row_start:row_end, col_start:col_end] = np.ones(config.image_size)
-                conditional_entropy -= coeff*conditional_entropy
-            conditional_entropy = conditional_entropy[config.image_size[0]:-config.image_size[0],
-                                                      config.image_size[1]:-config.image_size[1]]
+                for (r, c) in zip(range(location[0]-half_row, location[0]+half_row+1),
+                                  range(location[1]-half_col, location[1]+half_col+1)):
+                    conditional_entropy[r, c] = 0
+
             weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
             plans[agent.label].extend(sub_path)
@@ -273,6 +287,25 @@ def create_joint_plan(sub_team, simulation_group, config):
         # agent.other_plans.pop(agent.label)
 
     return
+
+
+def compute_conditional_entropy(belief, simulation_group, config):
+    conditional_entropy = np.zeros((config.dimension, config.dimension))
+    for key in belief.keys():
+        element = simulation_group[key]
+        p_yi_ci = np.asarray([[measure_model(element, ci, yi, config) for ci in element.state_space]
+                              for yi in element.state_space])
+        p_yi = np.matmul(p_yi_ci, belief[key])
+        for yi in element.state_space:
+            if p_yi[yi] <= 1e-100:
+                continue
+            for ci in element.state_space:
+                if belief[key][ci] <= 1e-100 or p_yi_ci[yi, ci] <= 1e-100:
+                    continue
+                conditional_entropy[key[0], key[1]] -= p_yi_ci[yi, ci] * belief[key][ci] * (np.log(p_yi_ci[yi, ci])
+                                                                                            + np.log(belief[key][ci])
+                                                                                            - np.log(p_yi[yi]))
+    return conditional_entropy
 
 
 def graph_search(start, end, weights, config):
