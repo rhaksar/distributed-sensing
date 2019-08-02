@@ -109,7 +109,6 @@ def set_next_meeting(sub_team, simulation_group, cell_locations, config):
     #                                                     - np.log(p_yi[yi]))
 
     conditional_entropy = compute_conditional_entropy(predicted_belief, simulation_group, config)
-    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     last_positions = []
     for agent in sub_team:
@@ -120,6 +119,18 @@ def set_next_meeting(sub_team, simulation_group, cell_locations, config):
         else:
             last_positions.append(agent.meetings[-1][0])  # this might error, need to fix
 
+    half_row = config.image_size[0]//2
+    half_col = config.image_size[1]//2
+    for agent in sub_team:
+        if not agent.meetings:
+            continue
+        for meeting in agent.meetings:
+            location = meeting[0]
+            for (r, c) in zip(range(location[0]-half_row, location[0]+half_row+1),
+                              range(location[1]-half_col, location[1]+half_col+1)):
+                conditional_entropy[r, c] = 0
+
+    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
     distances = np.maximum.reduce([np.linalg.norm(cell_locations - last_positions[i], ord=np.inf, axis=2)
                                    for i in range(len(last_positions))])
     meeting_r, meeting_c = np.where(distances == config.meeting_interval)
