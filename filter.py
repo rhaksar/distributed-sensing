@@ -57,6 +57,8 @@ def merge_beliefs(sub_team):
     for key in sub_team[0].belief.keys():
         beliefs = [agent.belief[key] for agent in sub_team]
         merged[key] = sum(beliefs)/len(beliefs)
+        merged[key] /= np.sum(merged[key])
+        # assert np.sum(merged[key]) == 1
 
     for agent in sub_team:
         agent.belief = copy(merged)
