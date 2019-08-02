@@ -41,8 +41,6 @@ def set_initial_meetings(team, schedule, cell_locations, config):
     for key in predicted_belief.keys():
         entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
 
-    half_row = (config.image_size[0]-1)//2
-    half_col = (config.image_size[1]-1)//2
     for i in range(1, len(schedule)):
 
         weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
@@ -59,14 +57,12 @@ def set_initial_meetings(team, schedule, cell_locations, config):
             if (idx+1)%2 == 0:
                 meeting_r, meeting_c = np.flip(meeting_r), np.flip(meeting_c)
             options = [(weights[r, c], (r, c)) for (r, c) in zip(meeting_r, meeting_c)]
+            np.random.shuffle(options)
             best_option = max(options, key=itemgetter(0))[1]
             [team[label].meetings.append([best_option, config.meeting_interval]) for label in meeting]
 
-            for ri, dr in enumerate(np.arange(-half_row, half_row+1, 1)):
-                for ci, dc in enumerate(np.arange(-half_col, half_col+1, 1)):
-                    r = best_option[0] + dr
-                    c = best_option[1] + dc
-
+            for r in range(best_option[0]-config.half_height, best_option[0]+config.half_height+1):
+                for c in range(best_option[1]-config.half_width, best_option[1]+config.half_width+1):
                     if 0 <= r < config.dimension and 0 <= c < config.dimension:
                         entropy[r, c] = 0
 
@@ -119,16 +115,16 @@ def set_next_meeting(sub_team, simulation_group, cell_locations, config):
         else:
             last_positions.append(agent.meetings[-1][0])  # this might error, need to fix
 
-    half_row = config.image_size[0]//2
-    half_col = config.image_size[1]//2
     for agent in sub_team:
         if not agent.meetings:
             continue
         for meeting in agent.meetings:
             location = meeting[0]
-            for (r, c) in zip(range(location[0]-half_row, location[0]+half_row+1),
-                              range(location[1]-half_col, location[1]+half_col+1)):
-                conditional_entropy[r, c] = 0
+
+            for r in range(location[0]-config.half_height, location[0]+config.half_height+1):
+                for c in range(location[1]-config.half_width, location[1]+config.half_width+1):
+                    if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                        conditional_entropy[r, c] = 0
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
     distances = np.maximum.reduce([np.linalg.norm(cell_locations - last_positions[i], ord=np.inf, axis=2)
@@ -145,6 +141,7 @@ def set_next_meeting(sub_team, simulation_group, cell_locations, config):
             score += cost_so_far[(end, 0)]
         score /= len(last_positions)
         options.append((score, end))
+    np.random.shuffle(options)
     best_option = min(options, key=itemgetter(0))[1]
     # best_option = np.asarray(rc_to_xy(config.dimension, best_option_rc)) + config.cell_side_length
     for agent in sub_team:
@@ -182,8 +179,6 @@ def create_solo_plan(uav, simulation_group, config):
 
     conditional_entropy = compute_conditional_entropy(belief, simulation_group, config)
 
-    half_row = config.image_size[0]//2
-    half_col = config.image_size[1]//2
     # conditional_entropy = np.pad(conditional_entropy, config.image_size, 'constant', constant_values=(0, 0))
     for other_label in uav.other_plans.keys():
         # if other_label > uav.label:
@@ -192,9 +187,10 @@ def create_solo_plan(uav, simulation_group, config):
             continue
         location = uav.other_plans[other_label].pop(0)
 
-        for (r, c) in zip(range(location[0]-half_row, location[0]+half_row+1),
-                          range(location[1]-half_col, location[1]+half_col+1)):
-            conditional_entropy[r, c] = 0
+        for r in range(location[0]-config.half_height, location[0]+config.half_height+1):
+            for c in range(location[1]-config.half_width, location[1]+config.half_width+1):
+                if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                    conditional_entropy[r, c] = 0
 
         # coeff = np.zeros_like(conditional_entropy)
         # row_start = config.image_size[0]+location[0]-half_row
@@ -246,8 +242,6 @@ def create_joint_plan(sub_team, simulation_group, config):
     conditional_entropy = compute_conditional_entropy(belief, simulation_group, config)
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
-    half_row = config.image_size[0]//2
-    half_col = config.image_size[1]//2
     plans = dict()
     agent_labels = [(agent.label, agent) for agent in sub_team]
     agent_labels.sort(key=itemgetter(0))
@@ -280,9 +274,10 @@ def create_joint_plan(sub_team, simulation_group, config):
             #                                           config.image_size[1]:-config.image_size[1]]
 
             for location in sub_path:
-                for (r, c) in zip(range(location[0]-half_row, location[0]+half_row+1),
-                                  range(location[1]-half_col, location[1]+half_col+1)):
-                    conditional_entropy[r, c] = 0
+                for r in range(location[0]-config.half_height, location[0]+config.half_height+1):
+                    for c in range(location[1]-config.half_width, location[1]+config.half_width+1):
+                        if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                            conditional_entropy[r, c] = 0
 
             weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
