@@ -28,6 +28,8 @@ def xy_to_rc(y_limit, xy):
 class Config(object):
 
     def __init__(self):
+        self.seed = None
+
         self.dimension = 25
         self.estimate_process_update = 10
         self.true_process_update = 10
@@ -38,12 +40,6 @@ class Config(object):
         # cy = np.linspace(0, self.dimension-1, self.dimension) + 0.5
         # Cx, Cy = np.meshgrid(cx, cy)
         # self.Cxy = np.stack([Cx, Cy], axis=2) # .reshape((self.dimension*self.dimension, 2))
-
-        cell_row = np.linspace(0, self.dimension-1, self.dimension)
-        cell_col = np.linspace(0, self.dimension-1, self.dimension)
-        Cell_row, Cell_col = np.meshgrid(cell_row, cell_col)
-        Cell_row, Cell_col = Cell_row.T, Cell_col.T
-        self.Crc = np.stack([Cell_row, Cell_col], axis=2)
 
         self.team_size = 4
         self.image_size = (3, 3)
