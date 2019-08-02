@@ -35,7 +35,7 @@ from filter import update_belief, measure_model
 #
 #     return
 
-def set_initial_meetings(team, schedule, config):
+def set_initial_meetings(team, schedule, cell_locations, config):
     predicted_belief = copy(team[1].belief)
     entropy = np.zeros((config.dimension, config.dimension))
     for key in predicted_belief.keys():
@@ -53,7 +53,7 @@ def set_initial_meetings(team, schedule, config):
                     last_positions.append(team[label].position)
                 else:
                     last_positions.append(team[label].meetings[i-1][0])  # this might error, need to fix
-            distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
+            distances = np.maximum.reduce([np.linalg.norm(cell_locations - last_positions[i], ord=np.inf, axis=2)
                                            for i in range(len(last_positions))])
             meeting_r, meeting_c = np.where(distances == config.meeting_interval)
             if (idx+1)%2 == 0:
@@ -73,7 +73,7 @@ def set_initial_meetings(team, schedule, config):
     return
 
 
-def set_next_meeting(sub_team, simulation_group, config):
+def set_next_meeting(sub_team, simulation_group, cell_locations, config):
     predicted_belief = copy(sub_team[0].belief)
     belief_updates = (config.total_interval-config.meeting_interval)//config.estimate_process_update
     for _ in range(belief_updates):
@@ -120,7 +120,7 @@ def set_next_meeting(sub_team, simulation_group, config):
         else:
             last_positions.append(agent.meetings[-1][0])  # this might error, need to fix
 
-    distances = np.maximum.reduce([np.linalg.norm(config.Crc - last_positions[i], ord=np.inf, axis=2)
+    distances = np.maximum.reduce([np.linalg.norm(cell_locations - last_positions[i], ord=np.inf, axis=2)
                                    for i in range(len(last_positions))])
     meeting_r, meeting_c = np.where(distances == config.meeting_interval)
     options = []
@@ -287,6 +287,14 @@ def create_joint_plan(sub_team, simulation_group, config):
         # agent.other_plans.pop(agent.label)
 
     return
+
+
+def compute_entropy(belief, config):
+    entropy = np.zeros((config.dimension, config.dimension))
+    for key in belief.keys():
+        entropy[key[0], key[1]] = ss.entropy(belief[key])
+
+    return entropy
 
 
 def compute_conditional_entropy(belief, simulation_group, config):
