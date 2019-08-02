@@ -1,8 +1,10 @@
-from copy import copy
-import matplotlib.pyplot as pyplot
+from copy import copy, deepcopy
+# import matplotlib.pyplot as pyplot
 import numpy as np
 import os
+import pickle
 import sys
+import time
 
 from filter import merge_beliefs, update_belief, get_image
 from scheduling import set_initial_meetings, set_next_meeting, create_joint_plan, create_solo_plan
@@ -17,10 +19,17 @@ if __name__ == '__main__':
     seed = 0
     np.random.seed(seed)
     settings = Config()
+    settings.seed = seed
 
     # initialize simulator
     dimension = 25
     sim = LatticeForest(settings.dimension, rng=seed)
+
+    cell_row = np.linspace(0, settings.dimension - 1, settings.dimension)
+    cell_col = np.linspace(0, settings.dimension - 1, settings.dimension)
+    Cell_row, Cell_col = np.meshgrid(cell_row, cell_col)
+    Cell_row, Cell_col = Cell_row.T, Cell_col.T
+    cell_locations = np.stack([Cell_row, Cell_col], axis=2)
 
     # initialize agents
     initial_belief = dict()
@@ -91,27 +100,35 @@ if __name__ == '__main__':
     #     sub_team = [team[i] for i in meeting]
     #     set_next_meeting(sub_team, sim.group, settings)
     # set_initial_meetings(team, schedule, settings)
-    set_initial_meetings(team, schedule, sim.group, settings)
+    set_initial_meetings(team, schedule, cell_locations, settings)
     for meeting in schedule[1]:
         sub_team = [team[i] for i in meeting]
         create_joint_plan(sub_team, sim.group, settings)
     next_meetings = 0
 
-    folder = 'sim_images/meetings/'
-    fig = pyplot.figure(1)
-    ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
-    ax1.set_xlim(0, settings.dimension)
-    ax1.set_ylim(0, settings.dimension)
-    for agent in team.values():
-        position = np.asarray(rc_to_xy(settings.dimension, agent.position)) + settings.cell_side_length
-        ax1.plot(position[0], position[1], 'bo', markersize=2)
+    save_data = dict()
+    save_data['settings'] = settings
+    save_data['time_series'] = dict()
+    save_data['time_series'][0] = {'team': deepcopy(team),
+                                   'process_state': sim.dense_state(),
+                                   'process_stats': copy(sim.stats)}
 
-    filename = folder + 'iteration' + str(0).zfill(3) + '.png'
-    pyplot.savefig(filename, bbox_inches='tight', dpi=300)
-    pyplot.close(fig)
+    # folder = 'sim_images/meetings/'
+    # fig = pyplot.figure(1)
+    # ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
+    # ax1.set_xlim(0, settings.dimension)
+    # ax1.set_ylim(0, settings.dimension)
+    # for agent in team.values():
+    #     position = np.asarray(rc_to_xy(settings.dimension, agent.position)) + settings.cell_side_length
+    #     ax1.plot(position[0], position[1], 'bo', markersize=2)
+    #
+    # filename = folder + 'iteration' + str(0).zfill(3) + '.png'
+    # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+    # pyplot.close(fig)
 
     # main loop
-    for t in range(1, 121):
+    for t in range(1, 21):
+        print('time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
 
@@ -124,7 +141,7 @@ if __name__ == '__main__':
                 [agent.meetings.pop(0) for agent in sub_team]
 
                 merge_beliefs(sub_team)
-                set_next_meeting(sub_team, sim.group, settings)
+                set_next_meeting(sub_team, sim.group, cell_locations, settings)
                 create_joint_plan(sub_team, sim.group, settings)
 
             next_meetings = 0 if next_meetings+1 > len(schedule)-1 else next_meetings+1
@@ -147,8 +164,8 @@ if __name__ == '__main__':
             # move(agent, sim.group, settings)
             # agent.position = agent.next_position
             # agent.next_position = None
-            path = create_solo_plan(agent, sim.group, settings)
-            agent.position = path[0]
+            agent.plan = create_solo_plan(agent, sim.group, settings)
+            agent.position = agent.plan[0]
             agent.meetings[0][1] -= 1
         # [move(agent, sim.group, settings) for agent in team.values()]
 
@@ -165,16 +182,24 @@ if __name__ == '__main__':
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
         # plot image - left is ground truth, right is agent paths and meeting locations
-        fig = pyplot.figure(1)
-        ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
-        ax1.set_xlim(0, settings.dimension)
-        ax1.set_ylim(0, settings.dimension)
-        for agent in team.values():
-            position = np.asarray(rc_to_xy(settings.dimension, agent.position)) + settings.cell_side_length
-            ax1.plot(position[0], position[1], 'bo', markersize=2)
+        # fig = pyplot.figure(1)
+        # ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
+        # ax1.set_xlim(0, settings.dimension)
+        # ax1.set_ylim(0, settings.dimension)
+        # for agent in team.values():
+        #     position = np.asarray(rc_to_xy(settings.dimension, agent.position)) + settings.cell_side_length
+        #     ax1.plot(position[0], position[1], 'bo', markersize=2)
+        #
+        # filename = folder + 'iteration' + str(t).zfill(3) + '.png'
+        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+        # pyplot.close(fig)
 
-        filename = folder + 'iteration' + str(t).zfill(3) + '.png'
-        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
-        pyplot.close(fig)
+        save_data['time_series'][t] = {'team': deepcopy(team),
+                                       'process_state': sim.dense_state(),
+                                       'process_stats': copy(sim.stats)}
+
+    filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
+    with open(filename, 'wb') as handle:
+        pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     print('done')
