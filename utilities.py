@@ -29,10 +29,11 @@ class Config(object):
 
     def __init__(self):
         self.seed = None
-
         self.dimension = 25
-        self.estimate_process_update = 5
-        self.true_process_update = 5
+
+        self.estimate_process_update = 10
+        self.true_process_update = 10
+        self.regularization_weight = 0
 
         self.cell_side_length = 0.5
 
@@ -41,13 +42,13 @@ class Config(object):
         # Cx, Cy = np.meshgrid(cx, cy)
         # self.Cxy = np.stack([Cx, Cy], axis=2) # .reshape((self.dimension*self.dimension, 2))
 
-        self.team_size = 4
+        self.team_size = 6
         self.image_size = (3, 3)
         self.half_height, self.half_width = (self.image_size[0]-1)//2, (self.image_size[1]-1)//2
 
         # self.deploy_interval = 2
         # self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
-        self.meeting_interval = 10
+        self.meeting_interval = 15
         self.total_interval = None
 
-        self.measure_correct = 0.9
+        self.measure_correct = 0.95

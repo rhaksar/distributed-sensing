@@ -8,7 +8,7 @@ from utilities import rc_to_xy
 from scheduling import compute_entropy
 
 if __name__ == '__main__':
-    filename = 'sim_images/meetings/meetings-02-Aug-2019-1639.pkl'
+    filename = 'sim_images/meetings/meetings-02-Aug-2019-1717.pkl'
     with open(filename, 'rb') as handle:
         save_data = pickle.load(handle)
 
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         axis_left.add_artist(tree)
 
     for t in range(len(time_series.keys())):
-        print('time {0:d}'.format(t))
+        print('[plotting] time {0:d}'.format(t))
         # axis_left.cla()
 
         process_state = time_series[t]['process_state']

@@ -37,6 +37,10 @@ if __name__ == '__main__':
     # center = (settings.dimension-1)//2
     for key in sim.group.keys():
         element = sim.group[key]
+        # exact belief
+        initial_belief[key] = np.zeros(len(element.state_space))
+        initial_belief[key][element.state] = 1
+
         # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)  # uniform belief
 
         # uniform belief around center, exact belief else where
@@ -45,8 +49,9 @@ if __name__ == '__main__':
         # else:
         #     initial_belief[key] = np.zeros(len(element.state_space))
         #     initial_belief[key][element.state] = 1
-        initial_belief[key] = 0.10*np.ones(len(element.state_space))
-        initial_belief[key][element.state] += 0.70
+
+        # initial_belief[key] = 0.10*np.ones(len(element.state_space))
+        # initial_belief[key][element.state] += 0.70
 
     team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
             for i in range(settings.team_size)}
@@ -107,27 +112,20 @@ if __name__ == '__main__':
     next_meetings = 0
 
     save_data = dict()
+    save_data['schedule'] = schedule
     save_data['settings'] = settings
     save_data['time_series'] = dict()
     save_data['time_series'][0] = {'team': deepcopy(team),
                                    'process_state': sim.dense_state(),
                                    'process_stats': copy(sim.stats)}
 
-    # folder = 'sim_images/meetings/'
-    # fig = pyplot.figure(1)
-    # ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
-    # ax1.set_xlim(0, settings.dimension)
-    # ax1.set_ylim(0, settings.dimension)
+    # print('time {0:d}'.format(0))
     # for agent in team.values():
-    #     position = np.asarray(rc_to_xy(settings.dimension, agent.position)) + settings.cell_side_length
-    #     ax1.plot(position[0], position[1], 'bo', markersize=2)
-    #
-    # filename = folder + 'iteration' + str(0).zfill(3) + '.png'
-    # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
-    # pyplot.close(fig)
+    #     print(agent.label, agent.meetings)
+    # print()
 
     # main loop
-    for t in range(1, 21):
+    for t in range(1, 201):
         print('time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
@@ -146,18 +144,9 @@ if __name__ == '__main__':
 
             next_meetings = 0 if next_meetings+1 > len(schedule)-1 else next_meetings+1
 
-        # possible optimization for setting the meeting location:
-        #   run filter forward for T steps, where T is the next meeting time, and incorporate expected conditional
-        #   entropy reduction due to traveling to other meetings
-        #   choose the location with the highest expected entropy which is within T steps away from all agents (check 
-        #   distances with Linf norm)
-        # possible optimization for setting the meeting location:
-        #   run filter forward for T steps on the merged belief, where T is the next meeting time, and incorporate
-        #   expected conditional entropy reduction due to traveling to other meetings
-        #   find the longest path of length T and use the final location as the next meeting location
-
-        # for agents not in a meeting, individually plan a path
-        # for each agent: update position using plan and update belief using image
+        # for agent in team.values():
+        #     print(agent.label, agent.meetings)
+        # print()
 
         # update agent position
         for agent in team.values():
@@ -181,22 +170,13 @@ if __name__ == '__main__':
                 advance = True
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
-        # plot image - left is ground truth, right is agent paths and meeting locations
-        # fig = pyplot.figure(1)
-        # ax1 = fig.add_subplot(111, aspect='equal', adjustable='box')
-        # ax1.set_xlim(0, settings.dimension)
-        # ax1.set_ylim(0, settings.dimension)
-        # for agent in team.values():
-        #     position = np.asarray(rc_to_xy(settings.dimension, agent.position)) + settings.cell_side_length
-        #     ax1.plot(position[0], position[1], 'bo', markersize=2)
-        #
-        # filename = folder + 'iteration' + str(t).zfill(3) + '.png'
-        # pyplot.savefig(filename, bbox_inches='tight', dpi=300)
-        # pyplot.close(fig)
-
         save_data['time_series'][t] = {'team': deepcopy(team),
                                        'process_state': sim.dense_state(),
                                        'process_stats': copy(sim.stats)}
+
+        if sim.end:
+            print('process has terminated')
+            break
 
     filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
     with open(filename, 'wb') as handle:
