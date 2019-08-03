@@ -8,7 +8,7 @@ from utilities import rc_to_xy
 from scheduling import compute_entropy
 
 if __name__ == '__main__':
-    filename = 'sim_images/meetings/meetings-02-Aug-2019-1717.pkl'
+    filename = 'sim_images/meetings/meetings-03-Aug-2019-0218.pkl'
     with open(filename, 'rb') as handle:
         save_data = pickle.load(handle)
 
@@ -126,4 +126,10 @@ if __name__ == '__main__':
         axis_left.figure.canvas.draw()
         filename = 'sim_images/meetings/' + 'iteration' + str(t).zfill(3) + '.png'
         pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+
+    extra_iterations = 10
+    for t in range(extra_iterations):
+        filename = 'sim_images/meetings/' + 'iteration' + str(t+1+len(time_series.keys())).zfill(3) + '.png'
+        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+
     print('done')
