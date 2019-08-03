@@ -127,9 +127,11 @@ if __name__ == '__main__':
         filename = 'sim_images/meetings/' + 'iteration' + str(t).zfill(3) + '.png'
         pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
+    final_time = len(time_series.keys())-1
     extra_iterations = 10
     for t in range(extra_iterations):
-        filename = 'sim_images/meetings/' + 'iteration' + str(t+1+len(time_series.keys())).zfill(3) + '.png'
+        print('[plotting] time {0:d} [{1:d}]'.format(final_time, t+1))
+        filename = 'sim_images/meetings/' + 'iteration' + str(final_time+1+t).zfill(3) + '.png'
         pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
     print('done')
