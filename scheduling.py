@@ -15,9 +15,10 @@ def set_initial_meetings(team, schedule, cell_locations, config):
         entropy[key[0], key[1]] = ss.entropy(predicted_belief[key])
 
     for i in range(1, len(schedule)):
-
-        weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
         for idx, meeting in enumerate(schedule[i]):
+
+            weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
+
             last_positions = []
             for label in meeting:
                 if not team[label].meetings:
