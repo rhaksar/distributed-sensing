@@ -162,7 +162,7 @@ def create_joint_plan(sub_team, simulation_group, config):
     belief = sub_team[0].belief
 
     conditional_entropy = compute_conditional_entropy(belief, simulation_group, config)
-    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+    # weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     plans = dict()
     agent_labels = [(agent.label, agent) for agent in sub_team]
@@ -173,6 +173,8 @@ def create_joint_plan(sub_team, simulation_group, config):
         start = agent.position
 
         for meeting in agent.meetings:
+            weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+
             # end = xy_to_rc(config.dimension, meeting[0])
             end = meeting[0]
             came_from, _ = graph_search((start, config.meeting_interval), end, -weights, config)
@@ -201,7 +203,7 @@ def create_joint_plan(sub_team, simulation_group, config):
                         if 0 <= r < config.dimension and 0 <= c < config.dimension:
                             conditional_entropy[r, c] = 0
 
-            weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+            # weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
             plans[agent.label].extend(sub_path)
             start = end
