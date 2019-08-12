@@ -29,12 +29,15 @@ def set_initial_meetings(team, schedule, cell_locations, config):
                                            for i in range(len(last_positions))])
             meeting_r, meeting_c = np.where(distances == config.meeting_interval)
             meetings = list(zip(meeting_r, meeting_c))
-            np.random.shuffle(meetings)
-            # if (idx+1)%2 == 0:
-            #     meeting_r, meeting_c = np.flip(meeting_r), np.flip(meeting_c)
-            options = [(weights[r, c], (r, c)) for (r, c) in meetings]
-            np.random.shuffle(options)
-            best_option = max(options, key=itemgetter(0))[1]
+            if len(meetings) == 1:
+                best_option = meetings[0]
+            else:
+                np.random.shuffle(meetings)
+                # if (idx+1)%2 == 0:
+                #     meeting_r, meeting_c = np.flip(meeting_r), np.flip(meeting_c)
+                options = [(weights[r, c], (r, c)) for (r, c) in meetings]
+                np.random.shuffle(options)
+                best_option = max(options, key=itemgetter(0))[1]
             [team[label].meetings.append([best_option, config.meeting_interval]) for label in meeting]
 
             for r in range(best_option[0]-config.half_height, best_option[0]+config.half_height+1):
@@ -84,19 +87,23 @@ def set_next_meeting(sub_team, simulation_group, cell_locations, config):
     distances = np.maximum.reduce([np.linalg.norm(cell_locations - last_positions[i], ord=np.inf, axis=2)
                                    for i in range(len(last_positions))])
     meeting_r, meeting_c = np.where(distances == config.meeting_interval)
-    options = []
-    for (m_r, m_c) in zip(meeting_r, meeting_c):
-        # end = xy_to_rc(config.dimension, config.Cxy[m_r, m_c])
-        end = (m_r, m_c)
-        score = 0
-        for position in last_positions:
-            # position_rc = xy_to_rc(config.dimension, position)
-            _, cost_so_far = graph_search((position, config.meeting_interval), end, -weights, config)
-            score += cost_so_far[(end, 0)]
-        score /= len(last_positions)
-        options.append((score, end))
-    np.random.shuffle(options)
-    best_option = min(options, key=itemgetter(0))[1]
+    meetings = zip(meeting_r, meeting_c)
+    if len(meetings) == 1:
+        best_option = meetings[0]
+    else:
+        options = []
+        for (m_r, m_c) in meetings:
+            # end = xy_to_rc(config.dimension, config.Cxy[m_r, m_c])
+            end = (m_r, m_c)
+            score = 0
+            for position in last_positions:
+                # position_rc = xy_to_rc(config.dimension, position)
+                _, cost_so_far = graph_search((position, config.meeting_interval), end, -weights, config)
+                score += cost_so_far[(end, 0)]
+            score /= len(last_positions)
+            options.append((score, end))
+        np.random.shuffle(options)
+        best_option = min(options, key=itemgetter(0))[1]
     # best_option = np.asarray(rc_to_xy(config.dimension, best_option_rc)) + config.cell_side_length
     for agent in sub_team:
         if not agent.meetings:
