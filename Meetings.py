@@ -1,5 +1,4 @@
 from copy import copy, deepcopy
-# import matplotlib.pyplot as pyplot
 import numpy as np
 import os
 import pickle
@@ -7,9 +6,9 @@ import sys
 import time
 
 from filter import merge_beliefs, update_belief, get_image
-from scheduling import set_initial_meetings, set_next_meeting, create_joint_plan, create_solo_plan
+from scheduling import schedule_initial_meetings, create_joint_plan, create_solo_plan
 from uav import UAV
-from utilities import Config, rc_to_xy, xy_to_rc
+from utilities import Config, xy_to_rc
 
 base_path = os.path.dirname(os.getcwd())
 sys.path.insert(0, base_path + '/simulators')
@@ -64,7 +63,7 @@ if __name__ == '__main__':
     for i in range(1, np.floor((settings.team_size-1)/2).astype(int)+1):
         Sprime.append((2*i, 2*i+1))
 
-    # create deployment locations
+    # deploy agents
     corner = xy_to_rc(settings.dimension, np.array([1.5, 1.5])-settings.cell_side_length)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
     for i, s in enumerate(S):
@@ -74,7 +73,7 @@ if __name__ == '__main__':
             team[k].position = position
             team[k].first = position
 
-    # deploy agents that do not have a meeting in S
+    # deploy remaining agents that do not have a meeting in S
     for agent in team.values():
         offset = len(S)+1
         if agent.position is None:
@@ -82,42 +81,32 @@ if __name__ == '__main__':
             agent.position = (corner[0]-idx[0], corner[1]+idx[1])
             offset += 1
 
-    # for i in range(2, 2*(np.floor(settings.team_size/2).astype(int)-1)+1, 2):
-    #     schedule[1].append((i, i+1))
-    # schedule[1].append((1, settings.team_size)) if settings.team_size%2==0 \
-    #     else schedule[1].append((settings.team_size-1, settings.team_size))
-    if settings.team_size%2 == 0:
-        for i in range(2, 2*(np.floor(settings.team_size/2).astype(int)), 2):
-            schedule[1].append((i, i+1))
-    else:
-        for i in range(2, 2*(np.floor(settings.team_size/2).astype(int))+1, 2):
-            schedule[1].append((i, i+1))
+    schedule_initial_meetings(team, Sprime, node_locations, settings)
+    for agent in team.values():
+        if agent.first is None:
+            agent.first = agent.last
+            agent.budget = settings.meeting_interval
+        if agent.last is None:
+            agent.last = agent.first
+            agent.budget = 2*settings.meeting_interval
 
-    # for meeting in schedule[1]:
-    #     sub_team = [team[i] for i in meeting]
-    #     set_next_meeting(sub_team, sim.group, settings)
-    # set_initial_meetings(team, schedule, settings)
-    set_initial_meetings(team, schedule, cell_locations, settings)
-    for meeting in schedule[1]:
-        sub_team = [team[i] for i in meeting]
-        create_joint_plan(sub_team, sim.group, settings)
+    # should this still be here?
+    # for s in Sprime:
+    #     sub_team = [team[k] for k in s]
+    #     create_joint_plan(sub_team, sim.group, settings)
+
     next_meetings = 0
 
     save_data = dict()
-    save_data['schedule'] = schedule
+    save_data['schedule'] = [S, Sprime]
     save_data['settings'] = settings
     save_data['time_series'] = dict()
     save_data['time_series'][0] = {'team': deepcopy(team),
                                    'process_state': sim.dense_state(),
                                    'process_stats': copy(sim.stats)}
 
-    # print('time {0:d}'.format(0))
-    # for agent in team.values():
-    #     print(agent.label, agent.meetings)
-    # print()
-
     # main loop
-    for t in range(1, 201):
+    for t in range(1, 2):
         print('time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
