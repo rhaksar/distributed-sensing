@@ -25,11 +25,10 @@ if __name__ == '__main__':
     dimension = 25
     sim = LatticeForest(settings.dimension, rng=seed)
 
-    cell_row = np.linspace(0, settings.dimension - 1, settings.dimension)
-    cell_col = np.linspace(0, settings.dimension - 1, settings.dimension)
-    Cell_row, Cell_col = np.meshgrid(cell_row, cell_col)
-    Cell_row, Cell_col = Cell_row.T, Cell_col.T
-    cell_locations = np.stack([Cell_row, Cell_col], axis=2)
+    node_row = np.linspace(0, settings.dimension - 1, settings.dimension)
+    node_col = np.linspace(0, settings.dimension - 1, settings.dimension)
+    node_row, node_col = np.meshgrid(node_row, node_col)
+    node_locations = np.stack([node_row.T, node_col.T], axis=2)
 
     # initialize agents
     initial_belief = dict()
@@ -41,7 +40,8 @@ if __name__ == '__main__':
         initial_belief[key] = np.zeros(len(element.state_space))
         initial_belief[key][element.state] = 1
 
-        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)  # uniform belief
+        # uniform belief
+        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
         # uniform belief around center, exact belief else where
         # if np.linalg.norm(np.asarray(key) - np.array([center, center]), ord=np.inf) <= radius:
@@ -56,37 +56,29 @@ if __name__ == '__main__':
     team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
             for i in range(settings.team_size)}
 
-    # specify graph schedule
-    # for i in range(1, 2*int(np.floor(settings.team_size/2))-1+1, 2):
-    #     team[i].meetings.append((oi+1, None))
-    #     team[i+1].meetings.append((i, None))
-    #
-    # for i in range(2, 2*(int(np.floor(settings.team_size/2))-1)+1, 2):
-    #     team[i].meetings.append((i+1, None))
-    #     team[i+1].meetings.append((i, None))
-    # team[1].meetings.append((settings.team_size, None))
-    # team[settings.team_size].meetings.append((1, None))
+    # create schedule
+    S = []
+    for i in range(1, np.floor(settings.team_size/2).astype(int)+1):
+        S.append((2*i-1, 2*i))
+    Sprime = []
+    for i in range(1, np.floor((settings.team_size-1)/2).astype(int)+1):
+        Sprime.append((2*i, 2*i+1))
 
-    schedule = [[], []]
-    settings.total_interval = 2*settings.meeting_interval
-    for i in range(1, 2*np.floor(settings.team_size/2).astype(int)-1+1, 2):
-        schedule[0].append((i, i+1))
-
+    # create deployment locations
     corner = xy_to_rc(settings.dimension, np.array([1.5, 1.5])-settings.cell_side_length)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
-    for i in range(len(schedule[0])):
+    for i, s in enumerate(S):
         idx = np.unravel_index(i, (square_size, square_size), order='C')
-        # position = corner + 0.5*np.asarray(idx[::-1])
         position = (corner[0]-idx[0], corner[1]+idx[1])
-        for idx in schedule[0][i]:
-            team[idx].position = position
-            team[idx].meetings.append([position, settings.meeting_interval])
+        for k in s:
+            team[k].position = position
+            team[k].first = position
 
+    # deploy agents that do not have a meeting in S
     for agent in team.values():
-        offset = len(schedule[0])+1
+        offset = len(S)+1
         if agent.position is None:
             idx = np.unravel_index(offset, (square_size, square_size), order='C')
-            # agent.position = corner + 0.5*np.asarray(idx[::-1])
             agent.position = (corner[0]-idx[0], corner[1]+idx[1])
             offset += 1
 
@@ -178,8 +170,8 @@ if __name__ == '__main__':
             print('process has terminated')
             break
 
-    filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
-    with open(filename, 'wb') as handle:
-        pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
+    # with open(filename, 'wb') as handle:
+    #     pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     print('done')
