@@ -66,6 +66,66 @@ def schedule_next_meeting(sub_team, simulation_group, cell_locations, config):
         np.random.shuffle(locations)
         options = []
 
+        for end in locations:
+            v = 0
+
+            for agent in sub_team:
+                if agent.first == agent.last:
+                    _, w = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
+                else:
+                    _, w = graph_search(agent.last, end, config.meeting_interval, weights, config)
+
+                v += w
+            v /= len(sub_team)
+            options.append((v, end))
+
+        meeting = max(options, key=itemgetter(0))[1]
+
+    for agent in sub_team:
+        if agent.first == agent.last:
+            agent.first = meeting
+            agent.last = meeting
+            agent.budget = 2*config.meeting_interval
+        else:
+            agent.first = copy(agent.last)
+            agent.last = meeting
+            agent.budget = config.meeting_interval
+
+
+def create_joint_plan(sub_team, simulation_group, config):
+    conditional_entropy = compute_conditional_entropy(sub_team[0].belief, simulation_group, config)
+
+    plans = dict()
+    for agent in sub_team:
+        plans[agent.label] = []
+
+        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+
+        if agent.first == agent.last:
+            came_from, _ = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)
+            sub_path = get_path(...)
+
+        else:
+            sub_path = []
+            came_from, _ = graph_search(agent.position, agent.first, config.meeting_interval, weights, config)
+            sub_path.extend(get_path(...))
+            came_from, _ = graph_search(agent.first, agent.last, config.meeting_interval, weights, config)
+            sub_path.extend(get_path(...))
+
+        for location in sub_path:
+            for r in range(location[0] - config.half_height, location[0] + config.half_height + 1):
+                for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
+                    if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                        conditional_entropy[r, c] = 0
+
+        plans[agent.label].extend(sub_path)
+
+    for agent in sub_team:
+        for label in plans.keys():
+            if label == agent.label:
+                continue
+            agent.other_plans[label] = copy(plans[label])
+
 
 def set_initial_meetings(team, schedule, cell_locations, config):
     predicted_belief = copy(team[1].belief)
@@ -170,6 +230,7 @@ def set_next_meeting(sub_team, simulation_group, cell_locations, config):
                 else:
                     _, cost_so_far = graph_search((agent.meetings[-1][0], config.meeting_interval), end, -weights,
                                                   config)
+                score += cost_so_far[(end, 0)]
             score /= len(last_positions)
             options.append((score, end))
         np.random.shuffle(options)
