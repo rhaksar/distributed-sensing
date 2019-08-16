@@ -8,6 +8,65 @@ import scipy.stats as ss
 from filter import update_belief, measure_model
 
 
+def schedule_initial_meetings(team, Sprime, cell_locations, config):
+    entropy = compute_entropy(team[1].belief, config)
+
+    for i, s in enumerate(Sprime):
+        weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
+
+        distances = np.maximum.reduce([np.linalg.norm(cell_locations-team[k].position, ord=np.inf, axis=2)
+                                       for k in s])
+        locations_r, locations_c = np.where(distances == config.meeting_interval)
+        locations = list(zip(locations_r, locations_c))
+
+        if len(locations) == 1:
+            meeting = locations[0]
+        else:
+            np.random.shuffle(locations)
+            options = [(weights[r, c], (r, c)) for (r, c) in locations]
+            meeting = max(options, key=itemgetter(0))[1]
+
+        for k in s:
+            team[k].last = meeting
+            team[k].budget = config.meeting_interval
+
+        for r in range(meeting[0]-config.half_height, meeting[0]+config.half_height + 1):
+            for c in range(meeting[1]-config.half_width, meeting[1]+config.half_width + 1):
+                if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                    entropy[r, c] = 0
+
+
+def schedule_next_meeting(sub_team, simulation_group, cell_locations, config):
+    predicted_belief = copy(sub_team[0].belief)
+    belief_updates = config.meeting_interval//config.process_update
+    for _ in range(belief_updates):
+        predicted_belief = update_belief(simulation_group, predicted_belief, True, dict(), config)
+
+    conditional_entropy = compute_conditional_entropy(predicted_belief, simulation_group, config)
+
+    for agent in sub_team:
+        for location in [agent.first, agent.last]:
+
+            for r in range(location[0] - config.half_height, location[0] + config.half_height + 1):
+                for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
+                    if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                        conditional_entropy[r, c] = 0
+
+    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+
+    distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
+                                   for agent in sub_team if agent.first != agent.last])
+    locations_r, locations_c = np.where(distances == config.meeting_interval)
+    locations = list(zip(locations_r, locations_c))
+
+    if len(locations) == 1:
+        meeting = locations[0]
+
+    else:
+        np.random.shuffle(locations)
+        options = []
+
+
 def set_initial_meetings(team, schedule, cell_locations, config):
     predicted_belief = copy(team[1].belief)
     entropy = np.zeros((config.dimension, config.dimension))
@@ -22,8 +81,7 @@ def set_initial_meetings(team, schedule, cell_locations, config):
             last_positions = []
             for label in meeting:
                 if not team[label].meetings:
-                    continue
-                    # last_positions.append(team[label].position)
+                    last_positions.append(team[label].position)
                 else:
                     last_positions.append(team[label].meetings[i-1][0])  # this might error, need to fix
             distances = np.maximum.reduce([np.linalg.norm(cell_locations - last_positions[i], ord=np.inf, axis=2)
@@ -37,7 +95,7 @@ def set_initial_meetings(team, schedule, cell_locations, config):
                 # if (idx+1)%2 == 0:
                 #     meeting_r, meeting_c = np.flip(meeting_r), np.flip(meeting_c)
                 options = [(weights[r, c], (r, c)) for (r, c) in meetings]
-                np.random.shuffle(options)
+                # np.random.shuffle(options)
                 best_option = max(options, key=itemgetter(0))[1]
             for label in meeting:
                 if not team[label].meetings:
