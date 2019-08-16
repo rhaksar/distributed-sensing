@@ -6,16 +6,20 @@ class UAV(object):
     def __init__(self, label=None, position=None, belief=None, image_size=None):
         self.label = label
         # self.deployed = False
-        self.time = 1
+        # self.time = 1
 
         self.position = position
-        self.next_position = None
+        # self.next_position = None
 
         self.image_size = image_size
         self.belief = belief
         # self.MImetric = None
 
-        self.meetings = []
+        self.budget = None
+        self.first = None
+        self.last = None
+
+        # self.meetings = []
         self.plan = []
         self.other_plans = dict()
 
