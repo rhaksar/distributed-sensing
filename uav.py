@@ -23,6 +23,18 @@ class UAV(object):
         self.plan = []
         self.other_plans = dict()
 
+    def __repr__(self):
+        return 'UAV ' + str(self.label) + '\n' + 'first: ' + str(self.first) + '\n' + 'last: ' + str(self.last) + \
+               '\n' + 'budget: ' + str(self.budget) + '\n' + 'plan: ' + str(self.plan) + '\n' + 'other plans: ' + \
+               str(self.other_plans)
+
+        # print('agent {0:d}'.format(self.label))
+        # print('position:', self.position)
+        # print('first:', self.first)
+        # print('last:', self.last)
+        # print('plan:', self.plan)
+        # print('other plans:', self.other_plans)
+
     # def deploy(self, time, config):
     #     if self.deployed:
     #         return
