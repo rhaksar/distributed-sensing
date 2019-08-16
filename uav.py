@@ -21,14 +21,14 @@ class UAV(object):
         self.other_plans = dict()
 
     def __repr__(self):
-        return 'UAV(\'label\': ' + str(self.label) + ', \'first\': ' + str(self.first) + \
-               ', \'last\': ' + str(self.last) + ', \'budget\': ' + str(self.budget) + \
+        return 'UAV(\'label\': ' + str(self.label) + ', \'position\': ' + str(self.position) + ', \'first\': ' + \
+               str(self.first) + ', \'last\': ' + str(self.last) + ', \'budget\': ' + str(self.budget) + \
                ', \'plan\': ' + str(self.plan) + ', \'other_plans\': ' + str(self.other_plans) + ')'
 
     def __str__(self):
-        return 'UAV ' + str(self.label) + '\n' + 'first: ' + str(self.first) + '\n' + 'last: ' + str(self.last) + \
-               '\n' + 'budget: ' + str(self.budget) + '\n' + 'plan: ' + str(self.plan) + '\n' + 'other plans: ' + \
-               str(self.other_plans)
+        return 'UAV ' + str(self.label) + '\n' + 'position: ' + str(self.position) + '\n' + 'first: ' + \
+               str(self.first) + '\n' + 'last: ' + str(self.last) + '\n' + 'budget: ' + str(self.budget) + \
+               '\n' + 'plan: ' + str(self.plan) + '\n' + 'other plans: ' + str(self.other_plans)
 
     # def deploy(self, time, config):
     #     if self.deployed:
