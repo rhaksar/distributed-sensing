@@ -6,9 +6,9 @@ import sys
 import time
 
 from filter import merge_beliefs, update_belief, get_image
-from scheduling import schedule_initial_meetings, create_joint_plan, create_solo_plan
+from scheduling import schedule_initial_meetings, schedule_next_meeting, create_joint_plan, create_solo_plan
 from uav import UAV
-from utilities import Config, xy_to_rc
+from utilities import Config
 
 base_path = os.path.dirname(os.getcwd())
 sys.path.insert(0, base_path + '/simulators')
@@ -64,11 +64,10 @@ if __name__ == '__main__':
         Sprime.append((2*i, 2*i+1))
 
     # deploy agents
-    corner = xy_to_rc(settings.dimension, np.array([1.5, 1.5])-settings.cell_side_length)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
-    for i, s in enumerate(S):
-        idx = np.unravel_index(i, (square_size, square_size), order='C')
-        position = (corner[0]-idx[0], corner[1]+idx[1])
+    for ith_meeting, s in enumerate(S):
+        idx = np.unravel_index(ith_meeting, (square_size, square_size), order='C')
+        position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
         for k in s:
             team[k].position = position
             team[k].first = position
@@ -78,7 +77,7 @@ if __name__ == '__main__':
         offset = len(S)+1
         if agent.position is None:
             idx = np.unravel_index(offset, (square_size, square_size), order='C')
-            agent.position = (corner[0]-idx[0], corner[1]+idx[1])
+            agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
             offset += 1
 
     schedule_initial_meetings(team, Sprime, node_locations, settings)
@@ -90,7 +89,7 @@ if __name__ == '__main__':
             agent.last = agent.first
             agent.budget = 2*settings.meeting_interval
 
-    # should this still be here?
+    # should this still be done here?
     # for s in Sprime:
     #     sub_team = [team[k] for k in s]
     #     create_joint_plan(sub_team, sim.group, settings)
@@ -113,41 +112,32 @@ if __name__ == '__main__':
 
         # check if any meetings should occur
         #   agents in a meeting merge beliefs, set next meeting based on schedule+filter, and jointly plan paths
-        if (t-1)%settings.meeting_interval==0:
+        if (t-1) % settings.meeting_interval == 0:
 
-            for meeting in schedule[next_meetings]:
-                sub_team = [team[i] for i in meeting]
-                [agent.meetings.pop(0) for agent in sub_team]
+            for s in [S, Sprime][next_meetings]:
+                sub_team = [team[k] for k in s]
 
                 merge_beliefs(sub_team)
-                set_next_meeting(sub_team, sim.group, cell_locations, settings)
+                schedule_next_meeting(sub_team, sim.group, node_locations, settings)
                 create_joint_plan(sub_team, sim.group, settings)
 
-            next_meetings = 0 if next_meetings+1 > len(schedule)-1 else next_meetings+1
-
-        # for agent in team.values():
-        #     print(agent.label, agent.meetings)
-        # print()
+            next_meetings = 0 if next_meetings+1 > 2 else next_meetings+1
 
         # update agent position
         for agent in team.values():
-            # move(agent, sim.group, settings)
-            # agent.position = agent.next_position
-            # agent.next_position = None
-            agent.plan = create_solo_plan(agent, sim.group, settings)
+            create_solo_plan(agent, sim.group, settings)
             agent.position = agent.plan[0]
-            agent.meetings[0][1] -= 1
-        # [move(agent, sim.group, settings) for agent in team.values()]
+            agent.budget -= 1
 
         # update simulator if necessary
-        if t>1 and (t-1)%settings.true_process_update==0:
+        if t > 1 and (t-1) % settings.process_update == 0:
             sim.update()
 
         # update agent belief
         for agent in team.values():
             _, observation = get_image(agent, sim, settings)
             advance = False
-            if t>1 and (t-1)%settings.estimate_process_update==0:
+            if t > 1 and (t-1) % settings.process_update == 0:
                 advance = True
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
