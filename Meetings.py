@@ -15,6 +15,9 @@ sys.path.insert(0, base_path + '/simulators')
 from fires.LatticeForest import LatticeForest
 
 if __name__ == '__main__':
+    print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
+    tic = time.clock()
+
     seed = 0
     np.random.seed(seed)
     settings = Config()
@@ -80,7 +83,7 @@ if __name__ == '__main__':
             agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
             offset += 1
 
-    schedule_initial_meetings(team, Sprime, node_locations, settings)
+    schedule_initial_meetings(team, Sprime, sim.group, node_locations, settings)
     for agent in team.values():
         if agent.first is None:
             agent.first = agent.last
@@ -101,11 +104,10 @@ if __name__ == '__main__':
     save_data['settings'] = settings
     save_data['time_series'] = dict()
     save_data['time_series'][0] = {'team': deepcopy(team),
-                                   'process_state': sim.dense_state(),
-                                   'process_stats': copy(sim.stats)}
+                                   'process_state': sim.dense_state()}
 
     # main loop
-    for t in range(1, 2):
+    for t in range(1, 101):
         print('time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
@@ -121,7 +123,7 @@ if __name__ == '__main__':
                 schedule_next_meeting(sub_team, sim.group, node_locations, settings)
                 create_joint_plan(sub_team, sim.group, settings)
 
-            next_meetings = 0 if next_meetings+1 > 2 else next_meetings+1
+            next_meetings = 0 if next_meetings+1 > 1 else next_meetings+1
 
         # update agent position
         for agent in team.values():
@@ -142,15 +144,17 @@ if __name__ == '__main__':
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
         save_data['time_series'][t] = {'team': deepcopy(team),
-                                       'process_state': sim.dense_state(),
-                                       'process_stats': copy(sim.stats)}
+                                       'process_state': sim.dense_state()}
 
         if sim.end:
             print('process has terminated')
             break
 
-    # filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
-    # with open(filename, 'wb') as handle:
-    #     pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
+    with open(filename, 'wb') as handle:
+        pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    print('done')
+    toc = time.clock()
+    dt = toc - tic
+    print('[Meetings] completed at %s' % (time.strftime('%d-%b %H:%M')))
+    print('[Meetings] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt / 60, dt / 3600))
