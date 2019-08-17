@@ -8,11 +8,11 @@ import scipy.stats as ss
 from filter import update_belief, measure_model
 
 
-def schedule_initial_meetings(team, Sprime, cell_locations, config):
-    entropy = compute_entropy(team[1].belief, config)
+def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, config):
+    conditional_entropy = compute_conditional_entropy(team[1].belief, simulation_group, config)
 
     for i, s in enumerate(Sprime):
-        weights = sn.filters.convolve(entropy, np.ones(config.image_size), mode='constant', cval=0)
+        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
         distances = np.maximum.reduce([np.linalg.norm(cell_locations-team[k].position, ord=np.inf, axis=2)
                                        for k in s])
@@ -30,10 +30,7 @@ def schedule_initial_meetings(team, Sprime, cell_locations, config):
             team[k].last = meeting
             team[k].budget = config.meeting_interval
 
-        for r in range(meeting[0] - config.half_height, meeting[0] + config.half_height + 1):
-            for c in range(meeting[1] - config.half_width, meeting[1] + config.half_width + 1):
-                if 0 <= r < config.dimension and 0 <= c < config.dimension:
-                    entropy[r, c] = 0
+        conditional_entropy = update_information(conditional_entropy, meeting, config)
 
 
 def schedule_next_meeting(sub_team, simulation_group, cell_locations, config):
@@ -46,11 +43,7 @@ def schedule_next_meeting(sub_team, simulation_group, cell_locations, config):
 
     for agent in sub_team:
         for location in [agent.first, agent.last]:
-
-            for r in range(location[0] - config.half_height, location[0] + config.half_height + 1):
-                for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
-                    if 0 <= r < config.dimension and 0 <= c < config.dimension:
-                        conditional_entropy[r, c] = 0
+            conditional_entropy = update_information(conditional_entropy, location, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
@@ -113,10 +106,7 @@ def create_joint_plan(sub_team, simulation_group, config):
             sub_path.extend(get_path(agent.first, agent.last, came_from))
 
         for location in sub_path:
-            for r in range(location[0] - config.half_height, location[0] + config.half_height + 1):
-                for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
-                    if 0 <= r < config.dimension and 0 <= c < config.dimension:
-                        conditional_entropy[r, c] = 0
+            conditional_entropy = update_information(conditional_entropy, location, config)
 
         plans[agent.label].extend(sub_path)
 
@@ -134,11 +124,7 @@ def create_solo_plan(agent, simulation_group, config):
         if not agent.other_plans[other_label]:
             continue
         location = agent.other_plans[other_label].pop(0)
-
-        for r in range(location[0] - config.half_height, location[0] + config.half_height + 1):
-            for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
-                if 0 <= r < config.dimension and 0 <= c < config.dimension:
-                    conditional_entropy[r, c] = 0
+        conditional_entropy = update_information(conditional_entropy, location, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
@@ -217,3 +203,12 @@ def get_path(start, end, came_from):
         current = previous
 
     return path
+
+
+def update_information(metric, location, config):
+    for r in range(location[0] - config.half_height, location[0] + config.half_height + 1):
+        for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
+            if 0 <= r < config.dimension and 0 <= c < config.dimension:
+                metric[r, c] = 0
+
+    return metric
