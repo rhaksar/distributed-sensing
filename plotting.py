@@ -8,7 +8,7 @@ from utilities import rc_to_xy
 from scheduling import compute_entropy
 
 if __name__ == '__main__':
-    filename = 'sim_images/meetings/meetings-03-Aug-2019-0218.pkl'
+    filename = 'sim_images/meetings/meetings-16-Aug-2019-1721.pkl'
     with open(filename, 'rb') as handle:
         save_data = pickle.load(handle)
 
@@ -117,10 +117,12 @@ if __name__ == '__main__':
             agent_plotting[agent.label]['path'].set_data(data_x, data_y)
 
             data_x, data_y = [], []
-            for element in agent.meetings:
-                x, y = np.asarray(rc_to_xy(settings.dimension, element[0])) + settings.cell_side_length
+            for element in [agent.first, agent.last]:
+                x, y = np.asarray(rc_to_xy(settings.dimension, element)) + settings.cell_side_length
                 data_x.append(x)
                 data_y.append(y)
+                if element == agent.last:
+                    continue
             agent_plotting[agent.label]['meetings'].set_data(data_x, data_y)
 
         axis_left.figure.canvas.draw()
