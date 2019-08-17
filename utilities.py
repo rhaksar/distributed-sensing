@@ -37,12 +37,12 @@ class Config(object):
         self.cell_side_length = 0.5
         self.corner = xy_to_rc(self.dimension, np.array([1.5, 1.5]) - self.cell_side_length)
 
-        self.team_size = 3
+        self.team_size = 5
         self.image_size = (3, 3)
         self.half_height, self.half_width = (self.image_size[0]-1)//2, (self.image_size[1]-1)//2
 
         # self.deploy_interval = 2
         # self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
-        self.meeting_interval = 5
+        self.meeting_interval = 7
 
         self.measure_correct = 0.95
