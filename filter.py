@@ -60,16 +60,16 @@ def merge_beliefs(sub_team):
         merged[key] /= np.sum(merged[key])
         # assert np.sum(merged[key]) == 1
 
-    for agent in sub_team:
-        agent.belief = copy(merged)
-    return
+    # for agent in sub_team:
+    #     agent.belief = copy(merged)
+    return merged
 
 
 def update_belief(simulation_group, prior, advance, observation, config, control=None):
     if control is None:
         control = defaultdict(lambda: (0, 0))
 
-    posterior = copy(prior)
+    posterior = dict()
     for key in simulation_group.keys():
         element = simulation_group[key]
         element_posterior = np.zeros(len(element.state_space))

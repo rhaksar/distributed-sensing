@@ -6,7 +6,8 @@ import sys
 import time
 
 from filter import merge_beliefs, update_belief, get_image
-from scheduling import schedule_initial_meetings, schedule_next_meeting, create_joint_plan, create_solo_plan
+from scheduling import schedule_initial_meetings, schedule_next_meeting, \
+    create_joint_plan, create_solo_plan, compute_entropy
 from uav import UAV
 from utilities import Config
 
@@ -55,7 +56,7 @@ if __name__ == '__main__':
         # initial_belief[key] = 0.10*np.ones(len(element.state_space))
         # initial_belief[key][element.state] += 0.70
 
-    team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
+    team = {i+1: UAV(label=i+1, belief=initial_belief, image_size=settings.image_size)
             for i in range(settings.team_size)}
 
     # create schedule
@@ -83,7 +84,11 @@ if __name__ == '__main__':
             agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
             offset += 1
 
-    schedule_initial_meetings(team, Sprime, sim.group, node_locations, settings)
+    meetings = schedule_initial_meetings(team, Sprime, sim.group, node_locations, settings)
+    for label in meetings.keys():
+        team[label].last = meetings[label]
+        team[label].budget = settings.meeting_interval
+
     for agent in team.values():
         if agent.first is None:
             agent.first = agent.last
@@ -103,12 +108,15 @@ if __name__ == '__main__':
     save_data['schedule'] = [S, Sprime]
     save_data['settings'] = settings
     save_data['time_series'] = dict()
-    save_data['time_series'][0] = {'team': deepcopy(team),
+    save_data['time_series'][0] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
+                                               team.keys()},
+                                   'position': {label: copy(team[label].position) for label in team.keys()},
+                                   'plan': {label: copy(team[label].plan) for label in team.keys()},
                                    'process_state': sim.dense_state()}
 
     # main loop
-    for t in range(1, 101):
-        print('time {0:d}'.format(t))
+    for t in range(1, 151):
+        print('[Meetings] time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
 
@@ -119,15 +127,33 @@ if __name__ == '__main__':
             for s in [S, Sprime][next_meetings]:
                 sub_team = [team[k] for k in s]
 
-                merge_beliefs(sub_team)
-                schedule_next_meeting(sub_team, sim.group, node_locations, settings)
-                create_joint_plan(sub_team, sim.group, settings)
+                merged_belief = merge_beliefs(sub_team)
+                for agent in sub_team:
+                    agent.belief = merged_belief
+
+                meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
+                for agent in sub_team:
+                    if agent.first == agent.last:
+                        agent.first = meeting
+                        agent.last = meeting
+                        agent.budget = 2*settings.meeting_interval
+                    else:
+                        agent.first = agent.last
+                        agent.last = meeting
+                        agent.budget = settings.meeting_interval
+
+                plans = create_joint_plan(sub_team, sim.group, settings)
+                for agent in sub_team:
+                    for label in plans.keys():
+                        if label == agent.label:
+                            continue
+                        agent.other_plans[label] = copy(plans[label])
 
             next_meetings = 0 if next_meetings+1 > 1 else next_meetings+1
 
         # update agent position
         for agent in team.values():
-            create_solo_plan(agent, sim.group, settings)
+            agent.plan = create_solo_plan(agent, sim.group, settings)
             agent.position = agent.plan[0]
             agent.budget -= 1
 
@@ -143,8 +169,17 @@ if __name__ == '__main__':
                 advance = True
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
-        save_data['time_series'][t] = {'team': deepcopy(team),
+        # save_data['time_series'][t] = {'team': deepcopy(team),
+        #                                'process_state': sim.dense_state()}
+        save_data['time_series'][t] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
+                                                   team.keys()},
+                                       'position': {label: copy(team[label].position) for label in team.keys()},
+                                       'plan': {label: copy(team[label].plan) for label in team.keys()},
                                        'process_state': sim.dense_state()}
+
+        if sim.early_end:
+            print('process cannot spread')
+            break
 
         if sim.end:
             print('process has terminated')
@@ -156,5 +191,5 @@ if __name__ == '__main__':
 
     toc = time.clock()
     dt = toc - tic
-    print('[Meetings] completed at %s' % (time.strftime('%d-%b %H:%M')))
+    print('[Meetings] completed at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     print('[Meetings] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt / 60, dt / 3600))

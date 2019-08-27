@@ -31,7 +31,7 @@ class Config(object):
         self.seed = None
         self.dimension = 25
 
-        self.process_update = 10
+        self.process_update = 5
         self.regularization_weight = 0
 
         self.cell_side_length = 0.5
@@ -41,8 +41,10 @@ class Config(object):
         self.image_size = (3, 3)
         self.half_height, self.half_width = (self.image_size[0]-1)//2, (self.image_size[1]-1)//2
 
+        self.movements = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 0), (0, 1), (1, -1), (1, 0), (1, 1)]
+
         # self.deploy_interval = 2
         # self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
-        self.meeting_interval = 7
+        self.meeting_interval = 10
 
         self.measure_correct = 0.95
