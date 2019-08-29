@@ -1,8 +1,8 @@
 from collections import defaultdict
 # from copy import copy
-import graph_tool as gt
-import graph_tool.search as gts
-import heapq
+# import graph_tool as gt
+# import graph_tool.search as gts
+# import heapq
 import networkx as nx
 import numpy as np
 from operator import itemgetter
@@ -79,11 +79,12 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 
             for agent in sub_team:
                 if agent.first == agent.last:
-                    # t0 = time.time()
+                    t0 = time.time()
                     _, w = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
-                    # t1 = time.time()
-                    # print(t1-t0)
-                    # print(w1)
+                    t1 = time.time()
+                    print(t1-t0)
+                    print(w)
+                    print('stop')
                     # t0 = time.time()
                     # P2, w2 = graph_search_gt(agent.last, end, 2*config.meeting_interval, weights, config)
                     # t1 = time.time()
@@ -219,11 +220,14 @@ def graph_search(start, end, length, weights, config):
                 continue
 
             neighbor = (neighbor_node, int(current_length-1))
+            edge = ((current_node, current_length), neighbor)
+            if graph.has_edge(edge[0], edge[1]):
+                continue
 
             if 0 <= neighbor_node[0] < config.dimension and 0 <= neighbor_node[1] < config.dimension:
-                edge = ((current_node, current_length), neighbor)
-                if graph.has_edge(edge[0], edge[1]):
-                    continue
+
+                # if graph.has_edge(edge[0], edge[1]):
+                #     continue
                 nodes.append(neighbor)
                 graph.add_edge(edge[0], edge[1], weight=weights[neighbor_node[0], neighbor_node[1]])
 
@@ -232,10 +236,21 @@ def graph_search(start, end, length, weights, config):
 
     # t0 = time.time()
     path = nx.algorithms.dag_longest_path(graph)
-    path = [element[0] for element in path]
-    path_weight = nx.algorithms.dag_longest_path_length(graph)
     # t1 = time.time()
     # print(t1-t0)
+
+    # t0 = time.time()
+    path_weight = sum([graph.get_edge_data(path[i], path[i+1])['weight'] for i in range(len(path)-1)])
+    # t1 = time.time()
+    # print(t1-t0)
+    # print(path_weight)
+
+    path = [element[0] for element in path]
+    # t0 = time.time()
+    # path_weight = nx.algorithms.dag_longest_path_length(graph)
+    # t1 = time.time()
+    # print(t1-t0)
+    # print(path_weight)
 
     return path, path_weight
 
