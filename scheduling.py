@@ -18,9 +18,10 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
     conditional_entropy = compute_conditional_entropy(team[1].belief, simulation_group, config)
     meetings = dict()
 
+    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+    weights += 1
+
     for s in Sprime:
-        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
-        weights += 1
 
         distances = np.maximum.reduce([np.linalg.norm(cell_locations-team[k].position, ord=np.inf, axis=2)
                                        for k in s])
@@ -40,6 +41,7 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
             # team[k].budget = config.meeting_interval
 
         conditional_entropy = update_information(conditional_entropy, meeting, config)
+        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     return meetings
 
@@ -120,12 +122,12 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 def create_joint_plan(sub_team, simulation_group, config):
     conditional_entropy = compute_conditional_entropy(sub_team[0].belief, simulation_group, config)
 
+    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+    weights += 1
+
     plans = dict()
     for agent in sub_team:
         plans[agent.label] = []
-
-        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
-        weights += 1
 
         if agent.first == agent.last:
             # came_from, _ = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)
@@ -144,6 +146,7 @@ def create_joint_plan(sub_team, simulation_group, config):
 
         for location in sub_path:
             conditional_entropy = update_information(conditional_entropy, location, config)
+        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
         plans[agent.label].extend(sub_path)
 
