@@ -1,8 +1,10 @@
-from copy import copy
+# from copy import copy
+import graph_tool as gt
+import graph_tool.search as gts
 import networkx as nx
 import numpy as np
 from operator import itemgetter
-from queue import PriorityQueue
+# from queue import PriorityQueue
 import scipy.ndimage as sn
 import scipy.stats as ss
 import time
@@ -16,6 +18,7 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
 
     for s in Sprime:
         weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+        weights += 1
 
         distances = np.maximum.reduce([np.linalg.norm(cell_locations-team[k].position, ord=np.inf, axis=2)
                                        for k in s])
@@ -52,6 +55,7 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
             conditional_entropy = update_information(conditional_entropy, location, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+    weights += 1
 
     distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
                                    for agent in sub_team if agent.first != agent.last])
@@ -70,16 +74,16 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 
             for agent in sub_team:
                 if agent.first == agent.last:
-                    random_weights = np.random.rand(*weights.shape)
                     t0 = time.time()
-                    came_from, w1 = graph_search(agent.last, end, 2*config.meeting_interval, random_weights, config)
-                    P1 = get_path(agent.last, end, came_from)
+                    P1, w1 = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
                     t1 = time.time()
                     print(t1-t0)
+                    print(w1)
                     t0 = time.time()
-                    P2, w2 = graph_search_nx(agent.last, end, 2*config.meeting_interval, random_weights, config)
+                    P2, w2 = graph_search_gt(agent.last, end, 2*config.meeting_interval, weights, config)
                     t1 = time.time()
                     print(t1-t0)
+                    print(w2)
                     print('stop here')
                 else:
                     _, w = graph_search(agent.last, end, config.meeting_interval, weights, config)
@@ -111,17 +115,22 @@ def create_joint_plan(sub_team, simulation_group, config):
         plans[agent.label] = []
 
         weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+        weights += 1
 
         if agent.first == agent.last:
-            came_from, _ = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)
-            sub_path = get_path(agent.position, agent.last, came_from)
+            # came_from, _ = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)
+            # sub_path = get_path(agent.position, agent.last, came_from)
+            sub_path = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)[0]
 
         else:
             sub_path = []
-            came_from, _ = graph_search(agent.position, agent.first, config.meeting_interval, weights, config)
-            sub_path.extend(get_path(agent.position, agent.first, came_from))
-            came_from, _ = graph_search(agent.first, agent.last, config.meeting_interval, weights, config)
-            sub_path.extend(get_path(agent.first, agent.last, came_from))
+            # came_from, _ = graph_search(agent.position, agent.first, config.meeting_interval, weights, config)
+            # sub_path.extend(get_path(agent.position, agent.first, came_from))
+            # came_from, _ = graph_search(agent.first, agent.last, config.meeting_interval, weights, config)
+            # sub_path.extend(get_path(agent.first, agent.last, came_from))
+
+            sub_path.extend(graph_search(agent.position, agent.first, config.meeting_interval, weights, config)[0])
+            sub_path.extend(graph_search(agent.first, agent.last, config.meeting_interval, weights, config)[0])
 
         for location in sub_path:
             conditional_entropy = update_information(conditional_entropy, location, config)
@@ -147,11 +156,13 @@ def create_solo_plan(agent, simulation_group, config):
         conditional_entropy = update_information(conditional_entropy, location, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
+    weights += 1
 
     came_from, _ = graph_search(agent.position, agent.first, agent.budget, weights, config)
     # agent.plan = get_path(agent.position, agent.first, came_from)
 
-    return get_path(agent.position, agent.first, came_from)
+    # return get_path(agent.position, agent.first, came_from)
+    return graph_search(agent.position, agent.first, agent.budget, weights, config)[0][1:]
 
 
 def compute_entropy(belief, config):
@@ -181,13 +192,15 @@ def compute_conditional_entropy(belief, simulation_group, config):
     return conditional_entropy
 
 
-def graph_search_nx(start, end, length, weights, config):
-    G = nx.DiGraph()
-    neighbors = [(start, length)]
-    nodes = []
+def graph_search(start, end, length, weights, config):
+    t0 = time.time()
+    graph = nx.DiGraph()
+    nodes = [(start, length)]
 
-    while neighbors:
-        current_node, current_length = neighbors.pop(0)
+    while nodes:
+        current_node, current_length = nodes.pop(0)
+        if current_length == 0:
+            continue
 
         for (dr, dc) in config.movements:
             neighbor_node = (current_node[0] + dr, current_node[1] + dc)
@@ -196,69 +209,140 @@ def graph_search_nx(start, end, length, weights, config):
             if new_dist >= current_length:
                 continue
 
-            neighbor = (neighbor_node, int(new_dist))
-
-            # if neighbor in nodes:
-            #     continue
+            neighbor = (neighbor_node, int(current_length-1))
 
             if 0 <= neighbor_node[0] < config.dimension and 0 <= neighbor_node[1] < config.dimension:
-                neighbors.append(neighbor)
+                edge = ((current_node, current_length), neighbor)
+                if graph.has_edge(edge[0], edge[1]):
+                    continue
                 nodes.append(neighbor)
-                G.add_edge((current_node, current_length), (neighbor_node, int(new_dist)),
-                           weight=-weights[neighbor_node[0], neighbor_node[1]])
+                graph.add_edge(edge[0], edge[1], weight=weights[neighbor_node[0], neighbor_node[1]])
 
-    print(nx.is_directed_acyclic_graph(G))
-    # return nx.algorithms.dag_longest_path(G), nx.algorithms.dag_longest_path_length(G)
-    return nx.algorithms.shortest_path(G, (start, length), (end, 0), weight='weight'), \
-           nx.algorithms.shortest_path_length(G, (start, length), (end, 0), weight='weight')
+    t1 = time.time()
+    print(t1-t0)
+
+    t0 = time.time()
+    path = nx.algorithms.dag_longest_path(graph)
+    path = [element[0] for element in path]
+    path_weight = nx.algorithms.dag_longest_path_length(graph)
+    t1 = time.time()
+    print(t1-t0)
+
+    return path, path_weight
 
 
-def graph_search(start, end, length, weights, config):
-    frontier = PriorityQueue()
+def graph_search_gt(start, end, length, weights, config):
+    t0 = time.time()
+    graph = gt.Graph()
+    nodes = [(start, length)]
 
-    start_node = (start, length)
-    frontier.put((-weights[start], start_node))
+    edges = []
+    vertex_labels = {}
 
-    came_from = dict()
-    cost_so_far = dict()
-    came_from[start_node] = None
-    cost_so_far[start_node] = weights[start]
+    # name = graph.new_vertex_property("string")
+    search_weights = graph.new_edge_property("double")
+    # graph.vertex_properties["name"] = name
+    # graph.edge_properties["weight"] = search_weights
 
-    while not frontier.empty():
-        current = frontier.get()[1]
-        current_location = current[0]
-        current_length = current[1]
+    while nodes:
+        current = nodes.pop(0)
+        if current in vertex_labels:
+            index = vertex_labels[current]
+        else:
+            vertex = graph.add_vertex()
+            index = graph.vertex_index[vertex]
+            # graph.vp.name[index] = str(current)
+            vertex_labels[current] = index
 
-        neighbors = []
+        current_node, current_length = current
+        if current_length == 0:
+            continue
+
         for (dr, dc) in config.movements:
-            new_dist = np.linalg.norm(np.asarray(current_location)+np.asarray([dr, dc]) - np.asarray(end), ord=np.inf)
-            # if new_dist >= length:
-            #     continue
+            neighbor_node = (current_node[0] + dr, current_node[1] + dc)
+            neighbor = (neighbor_node, int(current_length-1))
+            edge = (current, neighbor)
+            if edge in edges:
+                continue
+
+            new_dist = np.linalg.norm(np.asarray([current_node[0]+dr-end[0], current_node[1]+dc-end[1]]),
+                                      ord=np.inf)
             if new_dist >= current_length:
                 continue
 
-            if 0 <= current_location[0]+dr < config.dimension and 0 <= current_location[1]+dc < config.dimension:
-                neighbors.append(((current_location[0]+dr, current_location[1]+dc), int(current_length-1)))
+            if 0 <= neighbor_node[0] < config.dimension and 0 <= neighbor_node[1] < config.dimension:
 
-        for n in neighbors:
-            new_cost = cost_so_far[current] + weights[n[0][0], n[0][1]]
-            if n not in cost_so_far or new_cost > cost_so_far[n]:
-                cost_so_far[n] = new_cost
-                frontier.put((-new_cost, n))
-                came_from[n] = current
+                nodes.append(neighbor)
+                edges.append(edge)
 
-    return came_from, cost_so_far[(end, 0)]
+                if neighbor in vertex_labels:
+                    neighbor_index = vertex_labels[neighbor]
+                else:
+                    vertex = graph.add_vertex()
+                    neighbor_index = graph.vertex_index[vertex]
+                    # graph.vp.name[neighbor_index] = str(neighbor)
+                    vertex_labels[neighbor] = neighbor_index
+
+                graph.add_edge(index, neighbor_index)
+                search_weights[(index, neighbor_index)] = -weights[neighbor_node[0], neighbor_node[1]]
+    t1 = time.time()
+    print(t1-t0)
+
+    t0 = time.time()
+    start_label = vertex_labels[(start, length)]
+    end_label = vertex_labels[(end, 0)]
+    minimized, dist, pred = gts.bellman_ford_search(graph, graph.vertex(start_label), search_weights)
+    t1 = time.time()
+    print(t1-t0)
+    return None, -1*dist.a[end_label]
 
 
-def get_path(start, end, came_from):
-    path = [end]
-    current = (end, 0)
-    while came_from[current][0] != start:
-        previous = came_from[current]
-        path.insert(0, previous[0])
-        current = previous
+# def graph_search(start, end, length, weights, config):
+#     frontier = PriorityQueue()
+#
+#     start_node = (start, length)
+#     frontier.put((-weights[start], start_node))
+#
+#     came_from = dict()
+#     cost_so_far = dict()
+#     came_from[start_node] = None
+#     cost_so_far[start_node] = weights[start]
+#
+#     while not frontier.empty():
+#         current = frontier.get()[1]
+#         current_location = current[0]
+#         current_length = current[1]
+#
+#         neighbors = []
+#         for (dr, dc) in config.movements:
+#             new_dist = np.linalg.norm(np.asarray(current_location)+np.asarray([dr, dc]) - np.asarray(end), ord=np.inf)
+#             # if new_dist >= length:
+#             #     continue
+#             if new_dist >= current_length:
+#                 continue
+#
+#             if 0 <= current_location[0]+dr < config.dimension and 0 <= current_location[1]+dc < config.dimension:
+#                 neighbors.append(((current_location[0]+dr, current_location[1]+dc), int(current_length-1)))
+#
+#         for n in neighbors:
+#             new_cost = cost_so_far[current] + weights[n[0][0], n[0][1]]
+#             if n not in cost_so_far or new_cost > cost_so_far[n]:
+#                 cost_so_far[n] = new_cost
+#                 frontier.put((-new_cost, n))
+#                 came_from[n] = current
+#
+#     return came_from, cost_so_far[(end, 0)]
 
-    return path
+
+# def get_path(start, end, came_from):
+#     path = [end]
+#     current = (end, 0)
+#     while came_from[current][0] != start:
+#         previous = came_from[current]
+#         path.insert(0, previous[0])
+#         current = previous
+#
+#     return path
 
 
 def update_information(metric, location, config):
