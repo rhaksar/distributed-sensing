@@ -1,6 +1,8 @@
+from collections import defaultdict
 # from copy import copy
 import graph_tool as gt
 import graph_tool.search as gts
+import heapq
 import networkx as nx
 import numpy as np
 from operator import itemgetter
@@ -67,32 +69,39 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 
     else:
         np.random.shuffle(locations)
-        options = []
+        # options = []
+
+        highest_weight = -1
+        meeting = None
 
         for end in locations:
             v = 0
 
             for agent in sub_team:
                 if agent.first == agent.last:
-                    t0 = time.time()
-                    P1, w1 = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
-                    t1 = time.time()
-                    print(t1-t0)
-                    print(w1)
-                    t0 = time.time()
-                    P2, w2 = graph_search_gt(agent.last, end, 2*config.meeting_interval, weights, config)
-                    t1 = time.time()
-                    print(t1-t0)
-                    print(w2)
-                    print('stop here')
+                    # t0 = time.time()
+                    _, w = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
+                    # t1 = time.time()
+                    # print(t1-t0)
+                    # print(w1)
+                    # t0 = time.time()
+                    # P2, w2 = graph_search_gt(agent.last, end, 2*config.meeting_interval, weights, config)
+                    # t1 = time.time()
+                    # print(t1-t0)
+                    # print(w2)
+                    # print('stop here')
                 else:
                     _, w = graph_search(agent.last, end, config.meeting_interval, weights, config)
 
                 v += w
             v /= len(sub_team)
-            options.append((v, end))
 
-        meeting = max(options, key=itemgetter(0))[1]
+            if v > highest_weight:
+                meeting = end
+                highest_weight = v
+            # options.append((v, end))
+
+        # meeting = max(options, key=itemgetter(0))[1]
 
     # for agent in sub_team:
     #     if agent.first == agent.last:
@@ -158,7 +167,7 @@ def create_solo_plan(agent, simulation_group, config):
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
     weights += 1
 
-    came_from, _ = graph_search(agent.position, agent.first, agent.budget, weights, config)
+    # came_from, _ = graph_search(agent.position, agent.first, agent.budget, weights, config)
     # agent.plan = get_path(agent.position, agent.first, came_from)
 
     # return get_path(agent.position, agent.first, came_from)
@@ -193,7 +202,7 @@ def compute_conditional_entropy(belief, simulation_group, config):
 
 
 def graph_search(start, end, length, weights, config):
-    t0 = time.time()
+    # t0 = time.time()
     graph = nx.DiGraph()
     nodes = [(start, length)]
 
@@ -205,8 +214,8 @@ def graph_search(start, end, length, weights, config):
         for (dr, dc) in config.movements:
             neighbor_node = (current_node[0] + dr, current_node[1] + dc)
 
-            new_dist = np.linalg.norm(np.asarray(current_node) + np.asarray([dr, dc]) - np.asarray(end), ord=np.inf)
-            if new_dist >= current_length:
+            # new_dist = np.linalg.norm(np.asarray(current_node) + np.asarray([dr, dc]) - np.asarray(end), ord=np.inf)
+            if max(abs(current_node[0]+dr-end[0]), abs(current_node[1]+dc-end[1])) >= current_length:
                 continue
 
             neighbor = (neighbor_node, int(current_length-1))
@@ -218,83 +227,93 @@ def graph_search(start, end, length, weights, config):
                 nodes.append(neighbor)
                 graph.add_edge(edge[0], edge[1], weight=weights[neighbor_node[0], neighbor_node[1]])
 
-    t1 = time.time()
-    print(t1-t0)
+    # t1 = time.time()
+    # print(t1-t0)
 
-    t0 = time.time()
+    # t0 = time.time()
     path = nx.algorithms.dag_longest_path(graph)
     path = [element[0] for element in path]
     path_weight = nx.algorithms.dag_longest_path_length(graph)
-    t1 = time.time()
-    print(t1-t0)
+    # t1 = time.time()
+    # print(t1-t0)
 
     return path, path_weight
 
 
-def graph_search_gt(start, end, length, weights, config):
-    t0 = time.time()
-    graph = gt.Graph()
-    nodes = [(start, length)]
-
-    edges = []
-    vertex_labels = {}
-
-    # name = graph.new_vertex_property("string")
-    search_weights = graph.new_edge_property("double")
-    # graph.vertex_properties["name"] = name
-    # graph.edge_properties["weight"] = search_weights
-
-    while nodes:
-        current = nodes.pop(0)
-        if current in vertex_labels:
-            index = vertex_labels[current]
-        else:
-            vertex = graph.add_vertex()
-            index = graph.vertex_index[vertex]
-            # graph.vp.name[index] = str(current)
-            vertex_labels[current] = index
-
-        current_node, current_length = current
-        if current_length == 0:
-            continue
-
-        for (dr, dc) in config.movements:
-            neighbor_node = (current_node[0] + dr, current_node[1] + dc)
-            neighbor = (neighbor_node, int(current_length-1))
-            edge = (current, neighbor)
-            if edge in edges:
-                continue
-
-            new_dist = np.linalg.norm(np.asarray([current_node[0]+dr-end[0], current_node[1]+dc-end[1]]),
-                                      ord=np.inf)
-            if new_dist >= current_length:
-                continue
-
-            if 0 <= neighbor_node[0] < config.dimension and 0 <= neighbor_node[1] < config.dimension:
-
-                nodes.append(neighbor)
-                edges.append(edge)
-
-                if neighbor in vertex_labels:
-                    neighbor_index = vertex_labels[neighbor]
-                else:
-                    vertex = graph.add_vertex()
-                    neighbor_index = graph.vertex_index[vertex]
-                    # graph.vp.name[neighbor_index] = str(neighbor)
-                    vertex_labels[neighbor] = neighbor_index
-
-                graph.add_edge(index, neighbor_index)
-                search_weights[(index, neighbor_index)] = -weights[neighbor_node[0], neighbor_node[1]]
-    t1 = time.time()
-    print(t1-t0)
-
-    t0 = time.time()
-    start_label = vertex_labels[(start, length)]
-    end_label = vertex_labels[(end, 0)]
-    minimized, dist, pred = gts.bellman_ford_search(graph, graph.vertex(start_label), search_weights)
-    t1 = time.time()
-    print(t1-t0)
-    return None, -1*dist.a[end_label]
+# def graph_search_gt(start, end, length, weights, config):
+#     t0 = time.time()
+#     graph = gt.Graph()
+#     # nodes = [(start, length)]
+#     nodes = []
+#     heapq.heappush(nodes, (start, length))
+#
+#     # edges = []
+#     vertex_labels = {}
+#     # vertex_labels = defaultdict(lambda: int(graph.add_vertex()))
+#
+#     # name = graph.new_vertex_property("string")
+#     search_weights = graph.new_edge_property("double")
+#     # graph.vertex_properties["name"] = name
+#     # graph.edge_properties["weight"] = search_weights
+#
+#     while nodes:
+#         # current = nodes.pop(0)
+#         current = heapq.heappop(nodes)
+#         if current in vertex_labels:
+#             index = vertex_labels[current]
+#         else:
+#             vertex = graph.add_vertex()
+#             index = graph.vertex_index[vertex]
+#             # graph.vp.name[index] = str(current)
+#             vertex_labels[current] = index
+#         # index = vertex_labels[current]
+#
+#         current_node, current_length = current
+#         if current_length == 0:
+#             continue
+#
+#         for (dr, dc) in config.movements:
+#             neighbor_node = (current_node[0] + dr, current_node[1] + dc)
+#             neighbor = (neighbor_node, int(current_length-1))
+#             if neighbor in vertex_labels and graph.edge(index, vertex_labels[neighbor]):
+#                 continue
+#             # edge = (current, neighbor)
+#             # if edge in edges:
+#             #     continue
+#
+#             # new_dist = np.linalg.norm(np.asarray([current_node[0]+dr-end[0], current_node[1]+dc-end[1]]),
+#             #                           ord=np.inf)
+#             if max(abs(current_node[0]+dr-end[0]), abs(current_node[1]+dc-end[1])) >= current_length:
+#                 continue
+#
+#             if 0 <= neighbor_node[0] < config.dimension and 0 <= neighbor_node[1] < config.dimension:
+#
+#                 # nodes.append(neighbor)
+#                 heapq.heappush(nodes, neighbor)
+#
+#                 if neighbor in vertex_labels:
+#                     neighbor_index = vertex_labels[neighbor]
+#                 else:
+#                     vertex = graph.add_vertex()
+#                     neighbor_index = graph.vertex_index[vertex]
+#                     # graph.vp.name[neighbor_index] = str(neighbor)
+#                     vertex_labels[neighbor] = neighbor_index
+#                 # neighbor_index = vertex_labels[neighbor]
+#                 # edges.append(edge)
+#
+#                 graph.add_edge(index, neighbor_index)
+#                 search_weights[(index, neighbor_index)] = -weights[neighbor_node[0], neighbor_node[1]]
+#     t1 = time.time()
+#     print(t1-t0)
+#
+#     t0 = time.time()
+#     start_label = vertex_labels[(start, length)]
+#     end_label = vertex_labels[(end, 0)]
+#     minimized, dist, pred = gts.bellman_ford_search(graph, graph.vertex(start_label), search_weights)
+#     t1 = time.time()
+#     print(t1-t0)
+#     print(-1*dist.a[end_label])
+#     return None, -1*dist.a[end_label]
 
 
 # def graph_search(start, end, length, weights, config):
@@ -350,5 +369,9 @@ def update_information(metric, location, config):
         for c in range(location[1] - config.half_width, location[1] + config.half_width + 1):
             if 0 <= r < config.dimension and 0 <= c < config.dimension:
                 metric[r, c] = 0
+
+    # rows = range(max(0, location[0]-config.half_height), min(metric.shape[0], location[0]+config.half_height+1))
+    # cols = range(max(0, location[1]-config.half_width), min(metric.shape[1], location[1]+config.half_width+1))
+    # metric[rows, cols] = 0
 
     return metric
