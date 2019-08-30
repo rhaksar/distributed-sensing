@@ -55,25 +55,37 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
     conditional_entropy += 0.1
 
     for agent in sub_team:
-        for location in [agent.first, agent.last]:
-            conditional_entropy = update_information(conditional_entropy, location, config)
+        for other_label in agent.other_plans.keys():
+            if not agent.other_plans[other_label]:
+                continue
+            for location in agent.other_plans[other_label]:
+                conditional_entropy = update_information(conditional_entropy, location, config)
+
+        # for location in [agent.first, agent.last]:
+        #     conditional_entropy = update_information(conditional_entropy, location, config)
+        conditional_entropy = update_information(conditional_entropy, agent.first, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
-    distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
-                                   for agent in sub_team if agent.first != agent.last])
+    if all([agent.first == agent.last for agent in sub_team]):
+        distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
+                                       for agent in sub_team])
+    else:
+        distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
+                                       for agent in sub_team if agent.first != agent.last])
     locations_r, locations_c = np.where(distances == config.meeting_interval)
     locations = list(zip(locations_r, locations_c))
+    # print('valid meeting locations', locations)
 
     if len(locations) == 1:
         meeting = locations[0]
 
     else:
-        np.random.shuffle(locations)
-        # options = []
+        # np.random.shuffle(locations)
+        options = []
 
         highest_weight = -1
-        meeting = None
+        # meeting = None
 
         for end in locations:
             v = 0
@@ -88,10 +100,17 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
             v /= len(sub_team)
 
             if v > highest_weight:
-                meeting = end
+                # meeting = end
                 highest_weight = v
-            # options.append((v, end))
+            options.append((v, end))
 
+        # np.random.shuffle(options)
+        # print('all options', options)
+        options = [end[1] for end in options if end[0] >= 0.9*highest_weight]
+        np.random.shuffle(options)
+        meeting = options[0]
+        # print('best meeting locations', options)
+        # meeting = random.choice(options)
         # meeting = max(options, key=itemgetter(0))[1]
 
     # for agent in sub_team:
@@ -110,6 +129,16 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 def create_joint_plan(sub_team, simulation_group, config):
     conditional_entropy = compute_conditional_entropy(sub_team[0].belief, simulation_group, config)
     conditional_entropy += 0.1
+
+    for agent in sub_team:
+        for other_label in agent.other_plans.keys():
+            if not agent.other_plans[other_label]:
+                continue
+            for location in agent.other_plans[other_label]:
+                conditional_entropy = update_information(conditional_entropy, location, config)
+
+        # for location in [agent.first, agent.last]:
+        #     conditional_entropy = update_information(conditional_entropy, location, config)
 
     plans = dict()
     for agent in sub_team:
