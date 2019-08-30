@@ -1,4 +1,4 @@
-from collections import defaultdict
+# from collections import defaultdict
 # from copy import copy
 # import graph_tool as gt
 # import graph_tool.search as gts
@@ -16,12 +16,12 @@ from filter import update_belief, measure_model
 
 def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, config):
     conditional_entropy = compute_conditional_entropy(team[1].belief, simulation_group, config)
+    conditional_entropy += 0.1
     meetings = dict()
 
-    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
-    weights += 1
-
     for s in Sprime:
+
+        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
         distances = np.maximum.reduce([np.linalg.norm(cell_locations-team[k].position, ord=np.inf, axis=2)
                                        for k in s])
@@ -41,7 +41,6 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
             # team[k].budget = config.meeting_interval
 
         conditional_entropy = update_information(conditional_entropy, meeting, config)
-        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
     return meetings
 
@@ -53,13 +52,13 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
         predicted_belief = update_belief(simulation_group, predicted_belief, True, dict(), config)
 
     conditional_entropy = compute_conditional_entropy(predicted_belief, simulation_group, config)
+    conditional_entropy += 0.1
 
     for agent in sub_team:
         for location in [agent.first, agent.last]:
             conditional_entropy = update_information(conditional_entropy, location, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
-    weights += 1
 
     distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
                                    for agent in sub_team if agent.first != agent.last])
@@ -81,18 +80,7 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 
             for agent in sub_team:
                 if agent.first == agent.last:
-                    t0 = time.time()
                     _, w = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
-                    t1 = time.time()
-                    print(t1-t0)
-                    print(w)
-                    print('stop')
-                    # t0 = time.time()
-                    # P2, w2 = graph_search_gt(agent.last, end, 2*config.meeting_interval, weights, config)
-                    # t1 = time.time()
-                    # print(t1-t0)
-                    # print(w2)
-                    # print('stop here')
                 else:
                     _, w = graph_search(agent.last, end, config.meeting_interval, weights, config)
 
@@ -121,12 +109,11 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
 
 def create_joint_plan(sub_team, simulation_group, config):
     conditional_entropy = compute_conditional_entropy(sub_team[0].belief, simulation_group, config)
-
-    weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
-    weights += 1
+    conditional_entropy += 0.1
 
     plans = dict()
     for agent in sub_team:
+        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
         plans[agent.label] = []
 
         if agent.first == agent.last:
@@ -146,7 +133,6 @@ def create_joint_plan(sub_team, simulation_group, config):
 
         for location in sub_path:
             conditional_entropy = update_information(conditional_entropy, location, config)
-        weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
         plans[agent.label].extend(sub_path)
 
@@ -161,15 +147,15 @@ def create_joint_plan(sub_team, simulation_group, config):
 
 def create_solo_plan(agent, simulation_group, config):
     conditional_entropy = compute_conditional_entropy(agent.belief, simulation_group, config)
+    conditional_entropy += 0.1
 
     for other_label in agent.other_plans.keys():
         if not agent.other_plans[other_label]:
             continue
-        location = agent.other_plans[other_label].pop(0)
+        location = agent.other_plans[other_label][0]
         conditional_entropy = update_information(conditional_entropy, location, config)
 
     weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
-    weights += 1
 
     # came_from, _ = graph_search(agent.position, agent.first, agent.budget, weights, config)
     # agent.plan = get_path(agent.position, agent.first, came_from)
@@ -237,23 +223,12 @@ def graph_search(start, end, length, weights, config):
     # t1 = time.time()
     # print(t1-t0)
 
-    # t0 = time.time()
+    if len(graph.edges()) == 1:
+        return (start, end), weights[end[0], end[1]]
+
     path = nx.algorithms.dag_longest_path(graph)
-    # t1 = time.time()
-    # print(t1-t0)
-
-    # t0 = time.time()
     path_weight = sum([graph.get_edge_data(path[i], path[i+1])['weight'] for i in range(len(path)-1)])
-    # t1 = time.time()
-    # print(t1-t0)
-    # print(path_weight)
-
     path = [element[0] for element in path]
-    # t0 = time.time()
-    # path_weight = nx.algorithms.dag_longest_path_length(graph)
-    # t1 = time.time()
-    # print(t1-t0)
-    # print(path_weight)
 
     return path, path_weight
 
@@ -287,8 +262,8 @@ def graph_search(start, end, length, weights, config):
 #         # index = vertex_labels[current]
 #
 #         current_node, current_length = current
-#         if current_length == 0:
-#             continue
+#         # if current_length == 0:
+#         #    continue
 #
 #         for (dr, dc) in config.movements:
 #             neighbor_node = (current_node[0] + dr, current_node[1] + dc)
