@@ -115,7 +115,7 @@ if __name__ == '__main__':
                                    'process_state': sim.dense_state()}
 
     # main loop
-    for t in range(1, 151):
+    for t in range(1, 251):
         print('[Meetings] time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
@@ -155,6 +155,10 @@ if __name__ == '__main__':
         for agent in team.values():
             agent.plan = create_solo_plan(agent, sim.group, settings)
             agent.position = agent.plan[0]
+            for other_label in agent.other_plans.keys():
+                if not agent.other_plans[other_label]:
+                    continue
+                agent.other_plans[other_label].pop(0)
             agent.budget -= 1
 
         # update simulator if necessary
