@@ -15,6 +15,16 @@ base_path = os.path.dirname(os.getcwd())
 sys.path.insert(0, base_path + '/simulators')
 from fires.LatticeForest import LatticeForest
 
+
+def compute_accuracy(belief, true_state, config):
+    accuracy = 0
+    for key in belief.keys():
+        if np.argmax(belief[key]) == true_state[key[0], key[1]]:
+            accuracy += 1
+
+    return accuracy/(config.dimension**2)
+
+
 if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
@@ -25,7 +35,6 @@ if __name__ == '__main__':
     settings.seed = seed
 
     # initialize simulator
-    dimension = 25
     sim = LatticeForest(settings.dimension, rng=seed)
 
     node_row = np.linspace(0, settings.dimension - 1, settings.dimension)
@@ -84,11 +93,13 @@ if __name__ == '__main__':
             agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
             offset += 1
 
+    # set initial meeting locations and time budgets
     meetings = schedule_initial_meetings(team, Sprime, sim.group, node_locations, settings)
     for label in meetings.keys():
         team[label].last = meetings[label]
         team[label].budget = settings.meeting_interval
 
+    # make sure all agents have valid first and last meeting locations, as well as correct time budgets
     for agent in team.values():
         if agent.first is None:
             agent.first = agent.last
@@ -108,11 +119,14 @@ if __name__ == '__main__':
     save_data['schedule'] = [S, Sprime]
     save_data['settings'] = settings
     save_data['time_series'] = dict()
+    state = sim.dense_state()
     save_data['time_series'][0] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
                                                team.keys()},
+                                   'accuracy': {label: compute_accuracy(team[label].belief, state, settings)
+                                                for label in team.keys()},
                                    'position': {label: copy(team[label].position) for label in team.keys()},
                                    'plan': {label: copy(team[label].plan) for label in team.keys()},
-                                   'process_state': sim.dense_state()}
+                                   'process_state': state}
 
     # main loop
     for t in range(1, 251):
@@ -132,6 +146,7 @@ if __name__ == '__main__':
                     agent.belief = merged_belief
 
                 meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
+                # print('meeting', s, 'chose location', meeting)
                 for agent in sub_team:
                     if agent.first == agent.last:
                         agent.first = meeting
@@ -175,20 +190,24 @@ if __name__ == '__main__':
 
         # save_data['time_series'][t] = {'team': deepcopy(team),
         #                                'process_state': sim.dense_state()}
+        state = sim.dense_state()
         save_data['time_series'][t] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
                                                    team.keys()},
+                                       'accuracy': {label: compute_accuracy(team[label].belief, state, settings)
+                                                    for label in team.keys()},
                                        'position': {label: copy(team[label].position) for label in team.keys()},
                                        'plan': {label: copy(team[label].plan) for label in team.keys()},
-                                       'process_state': sim.dense_state()}
+                                       'process_state': state}
 
-        if sim.early_end:
-            print('process cannot spread')
-            break
+        # if sim.early_end:
+        #     print('process cannot spread')
+        #     break
+        #
+        # if sim.end:
+        #     print('process has terminated')
+        #     break
 
-        if sim.end:
-            print('process has terminated')
-            break
-
+    # write data to file
     filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
     with open(filename, 'wb') as handle:
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
