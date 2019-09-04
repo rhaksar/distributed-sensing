@@ -247,7 +247,7 @@ def graph_search(start, end, length, weights, config):
                 # if graph.has_edge(edge[0], edge[1]):
                 #     continue
                 nodes.append(neighbor)
-                graph.add_edge(edge[0], edge[1], weight=weights[neighbor_node[0], neighbor_node[1]])
+                graph.add_edge(edge[0], edge[1], weight=1e-4+weights[neighbor_node[0], neighbor_node[1]])
 
     # t1 = time.time()
     # print(t1-t0)
