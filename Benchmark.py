@@ -34,7 +34,7 @@ if __name__ == '__main__':
     tau = 3
     C = 2
     pc = 0.95
-    print('[Benchmark] tau = ' + str(tau) + ' C = ' + str(C) + ' pc = ' + str(pc))
+    print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=2, team_size=C, meeting_interval=tau, measure_correct=pc)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
@@ -173,7 +173,7 @@ if __name__ == '__main__':
         print('[Benchmark] finished simulation ' + str(seed+1))
 
     # write data to file
-    filename = 'sim_images/benchmark/benchmark-' + 'tau' + str(tau) + 'C' + str(C) + 'pc' + str(pc) + '.pkl'
+    filename = 'Benchmark/benchmark-' + 'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'
     with open(filename, 'wb') as handle:
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
