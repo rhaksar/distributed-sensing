@@ -30,7 +30,7 @@ if __name__ == '__main__':
     tic = time.clock()
 
     total_simulations = 10
-    total_iterations = 151
+    total_iterations = 121
     tau = 3
     C = 2
     pc = 0.95
