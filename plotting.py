@@ -14,7 +14,8 @@ if __name__ == '__main__':
 
     # add logic regarding getting latest filename or using command line argument
 
-    filename = 'sim_images/meetings/meetings-26-Aug-2019-1650.pkl'
+    # filename = 'sim_images/meetings/meetings-30-Aug-2019-1703.pkl'
+    filename = 'sim_images/meetings/meetings-04-Sep-2019-1853.pkl'
     with open(filename, 'rb') as handle:
         save_data = pickle.load(handle)
 
@@ -46,13 +47,13 @@ if __name__ == '__main__':
     # agent_plotting = {agent.label: dict() for agent in team.values()}
     agent_plotting = {i+1: dict() for i in range(settings.team_size)}
     for label in agent_plotting:
-        agent_plotting[label]['path'], = axis_left.plot([], [], linestyle='-', linewidth=0.5, Color='white', zorder=1)
-        agent_plotting[label]['meetings'], = axis_left.plot([], [], linestyle='', Marker='x', MarkerSize=2,
+        agent_plotting[label]['path'], = axis_left.plot([], [], linestyle='-', linewidth=1, Color='white', zorder=1)
+        agent_plotting[label]['meetings'], = axis_left.plot([], [], linestyle='', Marker='x', MarkerSize=4,
                                                             Color='white', zorder=1)
-        agent_plotting[label]['position'], = axis_left.plot([], [], linestyle='', Marker='o', MarkerSize=2,
+        agent_plotting[label]['position'], = axis_left.plot([], [], linestyle='', Marker='o', MarkerSize=4,
                                                             Color='blue', zorder=2)
 
-    meeting_plotting, = axis_left.plot([], [], linestyle='', marker='o', markersize=1, color='blue', zorder=1)
+    meeting_plotting, = axis_left.plot([], [], linestyle='', marker='o', markersize=2, color='blue', zorder=1)
     next_meetings = 0
     # max_entropy_value = ss.entropy((1/3)*np.ones(3))
 
