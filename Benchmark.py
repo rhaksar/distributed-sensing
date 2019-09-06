@@ -127,7 +127,8 @@ if __name__ == '__main__':
                     meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
                     # print('meeting', s, 'chose location', meeting)
                     for agent in sub_team:
-                        if agent.first == agent.last:
+                        # if agent.first == agent.last:
+                        if agent.label in [1, settings.team_size]:
                             agent.first = meeting
                             agent.last = meeting
                             agent.budget = 2*settings.meeting_interval

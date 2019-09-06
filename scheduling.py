@@ -71,8 +71,10 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
         distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
                                        for agent in sub_team])
     else:
+        # distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
+        #                                for agent in sub_team if agent.first != agent.last])
         distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
-                                       for agent in sub_team if agent.first != agent.last])
+                                       for agent in sub_team if agent.label not in [1, config.team_size]])
     locations_r, locations_c = np.where(distances == config.meeting_interval)
     locations = list(zip(locations_r, locations_c))
     # print('valid meeting locations', locations)
@@ -91,7 +93,8 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
             v = 0
 
             for agent in sub_team:
-                if agent.first == agent.last:
+                # if agent.first == agent.last:
+                if agent.label in [1, config.team_size]:
                     _, w = graph_search(agent.last, end, 2*config.meeting_interval, weights, config)
                 else:
                     _, w = graph_search(agent.last, end, config.meeting_interval, weights, config)
@@ -145,7 +148,8 @@ def create_joint_plan(sub_team, simulation_group, config):
         weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
         plans[agent.label] = []
 
-        if agent.first == agent.last:
+        # if agent.first == agent.last:
+        if agent.label in [1, config.team_size]:
             # came_from, _ = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)
             # sub_path = get_path(agent.position, agent.last, came_from)
             sub_path = graph_search(agent.position, agent.last, 2*config.meeting_interval, weights, config)[0]
@@ -255,7 +259,7 @@ def graph_search(start, end, length, weights, config):
     # print(t1-t0)
 
     if len(graph.edges()) == 1:
-        return (start, end), weights[end[0], end[1]]
+        return [start, end], weights[end[0], end[1]]
 
     path = nx.algorithms.dag_longest_path(graph)
     path_weight = sum([graph.get_edge_data(path[i], path[i+1])['weight'] for i in range(len(path)-1)])

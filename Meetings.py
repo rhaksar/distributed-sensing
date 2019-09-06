@@ -29,9 +29,10 @@ if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    seed = 0
+    total_iterations = 121
+    seed = 2
     np.random.seed(seed)
-    settings = Config()
+    settings = Config(team_size=10, meeting_interval=4, measure_correct=0.95)
     settings.seed = seed
 
     # initialize simulator
@@ -127,9 +128,11 @@ if __name__ == '__main__':
                                    'position': {label: copy(team[label].position) for label in team.keys()},
                                    'plan': {label: copy(team[label].plan) for label in team.keys()},
                                    'process_state': state}
+    # save_data['time_series'][0] = {'team': deepcopy(team),
+    #                                'process_state': state}
 
     # main loop
-    for t in range(1, 251):
+    for t in range(1, total_iterations):
         print('[Meetings] time {0:d}'.format(t))
         # deploy agents two at a time at deployment locations
         # [agent.deploy(t, settings) for agent in team.values()]
@@ -139,16 +142,19 @@ if __name__ == '__main__':
         if (t-1) % settings.meeting_interval == 0:
 
             for s in [S, Sprime][next_meetings]:
+                # print('meeting', s)
                 sub_team = [team[k] for k in s]
+                assert sub_team[0].position == sub_team[1].position
 
                 merged_belief = merge_beliefs(sub_team)
                 for agent in sub_team:
                     agent.belief = merged_belief
 
                 meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
-                # print('meeting', s, 'chose location', meeting)
+                # print('chose location', meeting)
                 for agent in sub_team:
-                    if agent.first == agent.last:
+                    # if agent.first == agent.last:
+                    if agent.label in [1, settings.team_size]:
                         agent.first = meeting
                         agent.last = meeting
                         agent.budget = 2*settings.meeting_interval
@@ -167,7 +173,9 @@ if __name__ == '__main__':
             next_meetings = 0 if next_meetings+1 > 1 else next_meetings+1
 
         # update agent position
+
         for agent in team.values():
+            # print(agent.label, agent.position)
             agent.plan = create_solo_plan(agent, sim.group, settings)
             agent.position = agent.plan[0]
             for other_label in agent.other_plans.keys():
@@ -198,6 +206,8 @@ if __name__ == '__main__':
                                        'position': {label: copy(team[label].position) for label in team.keys()},
                                        'plan': {label: copy(team[label].plan) for label in team.keys()},
                                        'process_state': state}
+        # save_data['time_series'][t] = {'team': deepcopy(team),
+        #                                'process_state': state}
 
         # if sim.early_end:
         #     print('process cannot spread')
