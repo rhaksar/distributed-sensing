@@ -221,6 +221,8 @@ def compute_conditional_entropy(belief, simulation_group, config):
 
 
 def graph_search(start, end, length, weights, config):
+    if max(np.abs(start[0]-end[0]), np.abs(start[1]-end[1])) > length:
+        raise Exception('length {0} too short to plan path from start {1} to end {2}'.format(length, start, end))
     # t0 = time.time()
     graph = nx.DiGraph()
     nodes = [(start, length)]
@@ -259,131 +261,12 @@ def graph_search(start, end, length, weights, config):
     path_weight = sum([graph.get_edge_data(path[i], path[i+1])['weight'] for i in range(len(path)-1)])
     path = [element[0] for element in path]
 
+    # if not path:
+    #     print(path)
+    #     print('failed to plan path from', start, 'to', end, 'with budget', length)
+    #     raise Exception()
+
     return path, path_weight
-
-
-# def graph_search_gt(start, end, length, weights, config):
-#     t0 = time.time()
-#     graph = gt.Graph()
-#     # nodes = [(start, length)]
-#     nodes = []
-#     heapq.heappush(nodes, (start, length))
-#
-#     # edges = []
-#     vertex_labels = {}
-#     # vertex_labels = defaultdict(lambda: int(graph.add_vertex()))
-#
-#     # name = graph.new_vertex_property("string")
-#     search_weights = graph.new_edge_property("double")
-#     # graph.vertex_properties["name"] = name
-#     # graph.edge_properties["weight"] = search_weights
-#
-#     while nodes:
-#         # current = nodes.pop(0)
-#         current = heapq.heappop(nodes)
-#         if current in vertex_labels:
-#             index = vertex_labels[current]
-#         else:
-#             vertex = graph.add_vertex()
-#             index = graph.vertex_index[vertex]
-#             # graph.vp.name[index] = str(current)
-#             vertex_labels[current] = index
-#         # index = vertex_labels[current]
-#
-#         current_node, current_length = current
-#         # if current_length == 0:
-#         #    continue
-#
-#         for (dr, dc) in config.movements:
-#             neighbor_node = (current_node[0] + dr, current_node[1] + dc)
-#             neighbor = (neighbor_node, int(current_length-1))
-#             if neighbor in vertex_labels and graph.edge(index, vertex_labels[neighbor]):
-#                 continue
-#             # edge = (current, neighbor)
-#             # if edge in edges:
-#             #     continue
-#
-#             # new_dist = np.linalg.norm(np.asarray([current_node[0]+dr-end[0], current_node[1]+dc-end[1]]),
-#             #                           ord=np.inf)
-#             if max(abs(current_node[0]+dr-end[0]), abs(current_node[1]+dc-end[1])) >= current_length:
-#                 continue
-#
-#             if 0 <= neighbor_node[0] < config.dimension and 0 <= neighbor_node[1] < config.dimension:
-#
-#                 # nodes.append(neighbor)
-#                 heapq.heappush(nodes, neighbor)
-#
-#                 if neighbor in vertex_labels:
-#                     neighbor_index = vertex_labels[neighbor]
-#                 else:
-#                     vertex = graph.add_vertex()
-#                     neighbor_index = graph.vertex_index[vertex]
-#                     # graph.vp.name[neighbor_index] = str(neighbor)
-#                     vertex_labels[neighbor] = neighbor_index
-#                 # neighbor_index = vertex_labels[neighbor]
-#                 # edges.append(edge)
-#
-#                 graph.add_edge(index, neighbor_index)
-#                 search_weights[(index, neighbor_index)] = -weights[neighbor_node[0], neighbor_node[1]]
-#     t1 = time.time()
-#     print(t1-t0)
-#
-#     t0 = time.time()
-#     start_label = vertex_labels[(start, length)]
-#     end_label = vertex_labels[(end, 0)]
-#     minimized, dist, pred = gts.bellman_ford_search(graph, graph.vertex(start_label), search_weights)
-#     t1 = time.time()
-#     print(t1-t0)
-#     print(-1*dist.a[end_label])
-#     return None, -1*dist.a[end_label]
-
-
-# def graph_search(start, end, length, weights, config):
-#     frontier = PriorityQueue()
-#
-#     start_node = (start, length)
-#     frontier.put((-weights[start], start_node))
-#
-#     came_from = dict()
-#     cost_so_far = dict()
-#     came_from[start_node] = None
-#     cost_so_far[start_node] = weights[start]
-#
-#     while not frontier.empty():
-#         current = frontier.get()[1]
-#         current_location = current[0]
-#         current_length = current[1]
-#
-#         neighbors = []
-#         for (dr, dc) in config.movements:
-#             new_dist = np.linalg.norm(np.asarray(current_location)+np.asarray([dr, dc]) - np.asarray(end), ord=np.inf)
-#             # if new_dist >= length:
-#             #     continue
-#             if new_dist >= current_length:
-#                 continue
-#
-#             if 0 <= current_location[0]+dr < config.dimension and 0 <= current_location[1]+dc < config.dimension:
-#                 neighbors.append(((current_location[0]+dr, current_location[1]+dc), int(current_length-1)))
-#
-#         for n in neighbors:
-#             new_cost = cost_so_far[current] + weights[n[0][0], n[0][1]]
-#             if n not in cost_so_far or new_cost > cost_so_far[n]:
-#                 cost_so_far[n] = new_cost
-#                 frontier.put((-new_cost, n))
-#                 came_from[n] = current
-#
-#     return came_from, cost_so_far[(end, 0)]
-
-
-# def get_path(start, end, came_from):
-#     path = [end]
-#     current = (end, 0)
-#     while came_from[current][0] != start:
-#         previous = came_from[current]
-#         path.insert(0, previous[0])
-#         current = previous
-#
-#     return path
 
 
 def update_information(metric, location, config):
