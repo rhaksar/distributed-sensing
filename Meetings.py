@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
                 merged_belief = merge_beliefs(sub_team)
                 for agent in sub_team:
-                    agent.belief = merged_belief
+                    agent.belief = copy(merged_belief)
 
                 meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
                 # print('chose location', meeting)
