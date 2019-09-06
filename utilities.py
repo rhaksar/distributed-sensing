@@ -32,7 +32,7 @@ class Config(object):
         self.dimension = 25
 
         self.process_update = process_update
-        # self.regularization_weight = 0
+        self.regularization_weight = 0
 
         self.cell_side_length = 0.5
         self.corner = xy_to_rc(self.dimension, np.array([1.5, 1.5]) - self.cell_side_length)
