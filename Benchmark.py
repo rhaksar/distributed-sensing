@@ -30,10 +30,11 @@ if __name__ == '__main__':
     tic = time.clock()
 
     total_simulations = 10
-    total_iterations = 121
-    tau = 3
+    offset = 10
+    total_iterations = 91
+    tau = 4
     C = 2
-    pc = 0.95
+    pc = 0.75
     print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=2, team_size=C, meeting_interval=tau, measure_correct=pc)
@@ -60,19 +61,28 @@ if __name__ == '__main__':
     for key in sim.group.keys():
         element = sim.group[key]
         # exact belief
-        initial_belief[key] = np.zeros(len(element.state_space))
-        initial_belief[key][element.state] = 1
+        # initial_belief[key] = np.zeros(len(element.state_space))
+        # initial_belief[key][element.state] = 1
+
+        # exact for healthy, uniform otherwise
+        # if element.state == 0:
+        #     initial_belief[key] = np.array([1.0, 0.0, 0.0])
+        # else:
+        #     initial_belief[key] = (1/3)*np.ones(len(element.state_space))
+
+        # uniform uncertainty
+        initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
     # initialize data structure for saving information
     save_data = dict()
 
-    for seed in range(total_simulations):
+    for sim_count, seed in enumerate(range(offset, total_simulations+offset)):
         np.random.seed(seed)
         sim.seed = seed
         sim.reset()
         save_data[seed] = dict()
 
-        team = {i+1: UAV(label=i+1, belief=initial_belief, image_size=settings.image_size)
+        team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
                 for i in range(settings.team_size)}
 
         # deploy agents
@@ -171,7 +181,7 @@ if __name__ == '__main__':
             state = sim.dense_state()
             save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
-        print('[Benchmark] finished simulation ' + str(seed+1))
+        print('[Benchmark] finished simulation ' + str(sim_count+1))
 
     # write data to file
     filename = 'Benchmark/benchmark-' + 'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'

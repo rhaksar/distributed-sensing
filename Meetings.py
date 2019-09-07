@@ -29,8 +29,8 @@ if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    total_iterations = 121
-    seed = 2
+    total_iterations = 91
+    seed = 0 + 10
     np.random.seed(seed)
     settings = Config(team_size=10, meeting_interval=4, measure_correct=0.95)
     settings.seed = seed
@@ -50,11 +50,17 @@ if __name__ == '__main__':
     for key in sim.group.keys():
         element = sim.group[key]
         # exact belief
-        initial_belief[key] = np.zeros(len(element.state_space))
-        initial_belief[key][element.state] = 1
+        # initial_belief[key] = np.zeros(len(element.state_space))
+        # initial_belief[key][element.state] = 1
+
+        # exact for healthy, uniform otherwise
+        if element.state == 0:
+            initial_belief[key] = np.array([1.0, 0.0, 0.0])
+        else:
+            initial_belief[key] = (1/len(element.state_space))*np.ones(len(element.state_space))
 
         # uniform belief
-        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
+        initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
         # uniform belief around center, exact belief else where
         # if np.linalg.norm(np.asarray(key) - np.array([center, center]), ord=np.inf) <= radius:
@@ -66,7 +72,7 @@ if __name__ == '__main__':
         # initial_belief[key] = 0.10*np.ones(len(element.state_space))
         # initial_belief[key][element.state] += 0.70
 
-    team = {i+1: UAV(label=i+1, belief=initial_belief, image_size=settings.image_size)
+    team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
             for i in range(settings.team_size)}
 
     # create schedule
