@@ -15,7 +15,7 @@ def measure_model(element, state, observation, config):
 
 
 def multiply_probabilities(values):
-    threshold = 1e-20  # determines the smallest non-zero probability
+    threshold = 1e-150  # determines the smallest non-zero probability
     if any([v < threshold for v in values]):
         return 0
     else:
