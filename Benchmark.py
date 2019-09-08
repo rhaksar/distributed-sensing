@@ -25,19 +25,28 @@ def compute_accuracy(belief, true_state, config):
     return accuracy/(config.dimension**2)
 
 
+def compute_frequency(team, true_state, data):
+    unique = list()
+    for agent in team.values():
+        if agent.position not in unique and true_state[agent.position[0], agent.position[1]] == 1:
+            data[agent.position[0], agent.position[1]] += 1
+            unique.append(data)
+
+
 if __name__ == '__main__':
     print('[Benchmark] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
     total_simulations = 10
     offset = 10
-    total_iterations = 91
+    rho = 1
+    total_iterations = 61
     tau = 4
-    C = 2
-    pc = 0.75
+    C = 3
+    pc = 0.95
     print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
-    settings = Config(process_update=2, team_size=C, meeting_interval=tau, measure_correct=pc)
+    settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
 
     # initialize simulator
@@ -61,8 +70,8 @@ if __name__ == '__main__':
     for key in sim.group.keys():
         element = sim.group[key]
         # exact belief
-        # initial_belief[key] = np.zeros(len(element.state_space))
-        # initial_belief[key][element.state] = 1
+        initial_belief[key] = np.zeros(len(element.state_space))
+        initial_belief[key][element.state] = 1
 
         # exact for healthy, uniform otherwise
         # if element.state == 0:
@@ -71,7 +80,7 @@ if __name__ == '__main__':
         #     initial_belief[key] = (1/3)*np.ones(len(element.state_space))
 
         # uniform uncertainty
-        initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
+        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
     # initialize data structure for saving information
     save_data = dict()
@@ -118,6 +127,7 @@ if __name__ == '__main__':
 
         next_meetings = 0
 
+        frequency = np.zeros((settings.dimension, settings.dimension))
         state = sim.dense_state()
         save_data[seed][0] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
@@ -166,6 +176,7 @@ if __name__ == '__main__':
                     agent.other_plans[other_label].pop(0)
                 agent.budget -= 1
 
+
             # update simulator if necessary
             if t > 1 and (t-1) % settings.process_update == 0:
                 sim.update()
@@ -179,8 +190,10 @@ if __name__ == '__main__':
                 agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
             state = sim.dense_state()
+            compute_frequency(team, state, frequency)
             save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
+        save_data[seed][total_iterations] = frequency
         print('[Benchmark] finished simulation ' + str(sim_count+1))
 
     # write data to file

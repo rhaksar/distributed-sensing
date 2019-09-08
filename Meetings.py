@@ -25,14 +25,22 @@ def compute_accuracy(belief, true_state, config):
     return accuracy/(config.dimension**2)
 
 
+def compute_frequency(team, true_state, data):
+    unique = list()
+    for agent in team.values():
+        if agent.position not in unique and true_state[agent.position[0], agent.position[1]] == 1:
+            data[agent.position[0], agent.position[1]] += 1
+            unique.append(data)
+
+
 if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    total_iterations = 91
+    total_iterations = 61
     seed = 0 + 10
     np.random.seed(seed)
-    settings = Config(team_size=10, meeting_interval=4, measure_correct=0.95)
+    settings = Config(process_update=1, team_size=10, meeting_interval=8, measure_correct=0.95)
     settings.seed = seed
 
     # initialize simulator
@@ -50,17 +58,17 @@ if __name__ == '__main__':
     for key in sim.group.keys():
         element = sim.group[key]
         # exact belief
-        # initial_belief[key] = np.zeros(len(element.state_space))
-        # initial_belief[key][element.state] = 1
+        initial_belief[key] = np.zeros(len(element.state_space))
+        initial_belief[key][element.state] = 1
 
         # exact for healthy, uniform otherwise
-        if element.state == 0:
-            initial_belief[key] = np.array([1.0, 0.0, 0.0])
-        else:
-            initial_belief[key] = (1/len(element.state_space))*np.ones(len(element.state_space))
+        # if element.state == 0:
+        #     initial_belief[key] = np.array([1.0, 0.0, 0.0])
+        # else:
+        #     initial_belief[key] = (1/len(element.state_space))*np.ones(len(element.state_space))
 
         # uniform belief
-        initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
+        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
         # uniform belief around center, exact belief else where
         # if np.linalg.norm(np.asarray(key) - np.array([center, center]), ord=np.inf) <= radius:
@@ -134,6 +142,7 @@ if __name__ == '__main__':
                                    'position': {label: copy(team[label].position) for label in team.keys()},
                                    'plan': {label: copy(team[label].plan) for label in team.keys()},
                                    'process_state': state}
+    frequency_matrix = np.zeros((settings.dimension, settings.dimension))
     # save_data['time_series'][0] = {'team': deepcopy(team),
     #                                'process_state': state}
 
@@ -153,6 +162,7 @@ if __name__ == '__main__':
                 assert sub_team[0].position == sub_team[1].position
 
                 merged_belief = merge_beliefs(sub_team)
+                # print(compute_accuracy(merged_belief, sim.dense_state(), settings))
                 for agent in sub_team:
                     agent.belief = copy(merged_belief)
 
@@ -205,6 +215,7 @@ if __name__ == '__main__':
         # save_data['time_series'][t] = {'team': deepcopy(team),
         #                                'process_state': sim.dense_state()}
         state = sim.dense_state()
+        compute_frequency(team, state, frequency_matrix)
         save_data['time_series'][t] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
                                                    team.keys()},
                                        'accuracy': {label: compute_accuracy(team[label].belief, state, settings)
@@ -227,6 +238,8 @@ if __name__ == '__main__':
     filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
     with open(filename, 'wb') as handle:
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    save_data['frequency'] = frequency_matrix
 
     toc = time.clock()
     dt = toc - tic
