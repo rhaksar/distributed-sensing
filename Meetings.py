@@ -37,14 +37,20 @@ if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    total_iterations = 61
+    total_iterations = 121
     seed = 0 + 10
     np.random.seed(seed)
-    settings = Config(process_update=1, team_size=10, meeting_interval=8, measure_correct=0.95)
+    settings = Config(process_update=2, team_size=5, meeting_interval=10, measure_correct=0.95)
     settings.seed = seed
 
     # initialize simulator
     sim = LatticeForest(settings.dimension, rng=seed)
+
+    # add fires to initial condition
+    # initial_fire = sim.fires
+    # initial_fire.extend([(6, 6), (6, 5), (6, 7), (7, 6), (5, 6), (5, 7), (5, 8), (4, 7)])
+    # sim.initial_fire = initial_fire
+    # sim.reset()
 
     node_row = np.linspace(0, settings.dimension - 1, settings.dimension)
     node_col = np.linspace(0, settings.dimension - 1, settings.dimension)
