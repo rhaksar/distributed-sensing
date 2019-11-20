@@ -32,17 +32,25 @@ def compute_frequency(team, true_state, data):
             data[agent.position[0], agent.position[1]] += 1
             unique.append(data)
 
-def compute_coverage(team, sim_object):
-    pass
+
+def compute_coverage(team, sim_object, state, settings):
+    team_observation = set()
+    for agent in team.values():
+        _, observation = get_image(agent, sim_object, settings)
+        agent_observation = {key for key in observation.keys() if state[key[0], key[1]] == 1}
+        team_observation |= agent_observation
+
+    return len(team_observation)/len(sim_object.fires)
+
 
 if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    total_iterations = 121
+    total_iterations = 61
     seed = 0 + 10
     np.random.seed(seed)
-    settings = Config(process_update=2, team_size=5, meeting_interval=10, measure_correct=0.95)
+    settings = Config(process_update=1, team_size=5, meeting_interval=8, measure_correct=0.95)
     settings.seed = seed
 
     # initialize simulator
@@ -151,14 +159,13 @@ if __name__ == '__main__':
                                    'plan': {label: copy(team[label].plan) for label in team.keys()},
                                    'process_state': state}
     frequency_matrix = np.zeros((settings.dimension, settings.dimension))
+    coverage_metric_series = []
     # save_data['time_series'][0] = {'team': deepcopy(team),
     #                                'process_state': state}
 
     # main loop
     for t in range(1, total_iterations):
         print('[Meetings] time {0:d}'.format(t))
-        # deploy agents two at a time at deployment locations
-        # [agent.deploy(t, settings) for agent in team.values()]
 
         # check if any meetings should occur
         #   agents in a meeting merge beliefs, set next meeting based on schedule+filter, and jointly plan paths
@@ -197,7 +204,6 @@ if __name__ == '__main__':
             next_meetings = 0 if next_meetings+1 > 1 else next_meetings+1
 
         # update agent position
-
         for agent in team.values():
             # print(agent.label, agent.position)
             agent.plan = create_solo_plan(agent, sim.group, settings)
@@ -224,6 +230,7 @@ if __name__ == '__main__':
         #                                'process_state': sim.dense_state()}
         state = sim.dense_state()
         compute_frequency(team, state, frequency_matrix)
+        coverage_metric_series.append(compute_coverage(team, sim, state, settings))
         save_data['time_series'][t] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
                                                    team.keys()},
                                        'accuracy': {label: compute_accuracy(team[label].belief, state, settings)
@@ -248,6 +255,8 @@ if __name__ == '__main__':
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     save_data['frequency'] = frequency_matrix
+    save_data['coverage'] = np.mean(coverage_metric_series)
+    # print('coverage metric =',save_data['coverage'])
 
     toc = time.clock()
     dt = toc - tic
