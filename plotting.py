@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # add logic regarding getting latest filename or using command line argument
 
     # filename = 'sim_images/meetings/meetings-30-Aug-2019-1703.pkl'
-    filename = 'sim_images/meetings/meetings-04-Sep-2019-1853.pkl'
+    filename = 'sim_images/meetings/meetings-09-Sep-2019-1649.pkl'
     with open(filename, 'rb') as handle:
         save_data = pickle.load(handle)
 
@@ -60,7 +60,8 @@ if __name__ == '__main__':
     for tree in trees:
         axis_left.add_artist(tree)
 
-    for t in range(len(time_series.keys())):
+    final_time = len(time_series.keys())-1
+    for t in range(final_time+1):
         print('[plotting] time {0:d}'.format(t))
         # axis_left.cla()
 
@@ -146,11 +147,11 @@ if __name__ == '__main__':
         pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
     # final_time = len(time_series.keys())-1
-    # extra_iterations = 10
-    # for t in range(extra_iterations):
-    #     print('[plotting] time {0:d} [{1:d}]'.format(final_time, t+1))
-    #     filename = 'sim_images/meetings/' + 'iteration' + str(final_time+1+t).zfill(4) + '.png'
-    #     pyplot.savefig(filename, bbox_inches='tight', dpi=300)
+    extra_iterations = 10
+    for t in range(extra_iterations):
+        print('[plotting] time {0:d} [{1:d}]'.format(final_time, t+1))
+        filename = 'sim_images/meetings/' + 'iteration' + str(final_time+1+t).zfill(4) + '.png'
+        pyplot.savefig(filename, bbox_inches='tight', dpi=300)
 
     toc = time.clock()
     dt = toc - tic
