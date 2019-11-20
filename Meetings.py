@@ -32,6 +32,8 @@ def compute_frequency(team, true_state, data):
             data[agent.position[0], agent.position[1]] += 1
             unique.append(data)
 
+def compute_coverage(team, sim_object):
+    pass
 
 if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
