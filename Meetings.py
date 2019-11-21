@@ -50,7 +50,7 @@ if __name__ == '__main__':
     total_iterations = 61
     seed = 0 + 10
     np.random.seed(seed)
-    settings = Config(process_update=1, team_size=5, meeting_interval=8, measure_correct=0.95)
+    settings = Config(process_update=1, team_size=2, meeting_interval=8, measure_correct=0.95)
     settings.seed = seed
 
     # initialize simulator
@@ -255,7 +255,7 @@ if __name__ == '__main__':
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     save_data['frequency'] = frequency_matrix
-    save_data['coverage'] = np.mean(coverage_metric_series)
+    save_data['coverage'] = coverage_metric_series
     # print('coverage metric =',save_data['coverage'])
 
     toc = time.clock()

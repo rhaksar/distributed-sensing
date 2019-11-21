@@ -43,7 +43,6 @@ def compute_coverage(team, sim_object, state, settings):
     return len(team_observation)/len(sim_object.fires)
 
 
-
 if __name__ == '__main__':
     print('[Baseline] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()

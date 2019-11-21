@@ -43,7 +43,6 @@ def compute_coverage(team, sim_object, state, settings):
     return len(team_observation)/len(sim_object.fires)
 
 
-
 if __name__ == '__main__':
     print('[Benchmark] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
@@ -53,7 +52,7 @@ if __name__ == '__main__':
     rho = 1
     total_iterations = 61
     tau = 4
-    C = 3
+    C = 2
     pc = 0.95
     print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
