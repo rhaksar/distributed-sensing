@@ -33,9 +33,24 @@ def compute_frequency(team, true_state, data):
             unique.append(data)
 
 
+def compute_coverage(team, sim_object, state, settings):
+    team_observation = set()
+    for agent in team.values():
+        _, observation = get_image(agent, sim_object, settings)
+        agent_observation = {key for key in observation.keys() if state[key[0], key[1]] == 1}
+        team_observation |= agent_observation
+
+    return len(team_observation)/len(sim_object.fires)
+
+
+
 if __name__ == '__main__':
-    print('[Benchmark] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
+    print('[Baseline] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
+
+    communication = False
+    if communication:
+        print('[Baseline]     with communication')
 
     total_simulations = 10
     offset = 10
@@ -44,7 +59,7 @@ if __name__ == '__main__':
     tau = 4
     C = 3
     pc = 0.95
-    print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
+    print('[Baseline] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
@@ -131,9 +146,10 @@ if __name__ == '__main__':
 
         next_meetings = 0
 
-        frequency = np.zeros((settings.dimension, settings.dimension))
-        state = sim.dense_state()
-        save_data[seed][0] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
+        # frequency = np.zeros((settings.dimension, settings.dimension))
+        # state = sim.dense_state()
+        # save_data[seed][0] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
+        save_data[seed]['coverage'] = []
 
         # main loop
         for t in range(1, total_iterations):
@@ -181,10 +197,6 @@ if __name__ == '__main__':
                 agent.budget -= 1
 
 
-            # update simulator if necessary
-            if t > 1 and (t-1) % settings.process_update == 0:
-                sim.update()
-
             # update agent belief
             for agent in team.values():
                 _, observation = get_image(agent, sim, settings)
@@ -193,12 +205,17 @@ if __name__ == '__main__':
                     advance = True
                 agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
 
-            state = sim.dense_state()
-            compute_frequency(team, state, frequency)
-            save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
+            # update simulator if necessary
+            if t > 1 and (t-1) % settings.process_update == 0:
+                sim.update()
 
-        save_data[seed][total_iterations] = frequency
-        print('[Benchmark] finished simulation ' + str(sim_count+1))
+            state = sim.dense_state()
+            save_data[seed]['coverage'].append(compute_coverage(team, sim, state, settings))
+            # compute_frequency(team, state, frequency)
+            # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
+
+        # save_data[seed][total_iterations] = frequency
+        print('[Baseline] finished simulation ' + str(sim_count+1))
 
     # write data to file
     filename = 'Benchmark/benchmark-' + 'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'
@@ -207,5 +224,5 @@ if __name__ == '__main__':
 
     toc = time.clock()
     dt = toc - tic
-    print('[Benchmark] completed at %s' % (time.strftime('%d-%b-%Y %H:%M')))
-    print('[Benchmark] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt / 60, dt / 3600))
+    print('[Baseline] completed at %s' % (time.strftime('%d-%b-%Y %H:%M')))
+    print('[Baseline] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt / 60, dt / 3600))

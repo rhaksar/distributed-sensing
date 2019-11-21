@@ -214,10 +214,6 @@ if __name__ == '__main__':
                 agent.other_plans[other_label].pop(0)
             agent.budget -= 1
 
-        # update simulator if necessary
-        if t > 1 and (t-1) % settings.process_update == 0:
-            sim.update()
-
         # update agent belief
         for agent in team.values():
             _, observation = get_image(agent, sim, settings)
@@ -225,6 +221,10 @@ if __name__ == '__main__':
             if t > 1 and (t-1) % settings.process_update == 0:
                 advance = True
             agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
+
+        # update simulator if necessary
+        if t > 1 and (t-1) % settings.process_update == 0:
+            sim.update()
 
         # save_data['time_series'][t] = {'team': deepcopy(team),
         #                                'process_state': sim.dense_state()}
