@@ -77,6 +77,9 @@ if __name__ == '__main__':
         team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
                 for i in range(settings.team_size)}
 
+        if communication:
+            team_belief = copy(initial_belief)
+
         # deploy all agents at unique locations
         offset = 0
         for agent in team.values():
@@ -96,13 +99,13 @@ if __name__ == '__main__':
 
             if communication:
                 # merge all agent beliefs
-                merged_belief = merge_beliefs([agent for agent in team.values()])
-                for agent in team.values():
-                    agent.belief = merged_belief
+                # merged_belief = merge_beliefs([agent for agent in team.values()])
+                # for agent in team.values():
+                #     agent.belief = merged_belief
 
-                # predict future belief (open-loop)
-                predicted_belief = merged_belief
-                belief_updates = settings.meeting_interval // settings.process_update
+                # predict future belief of team belief (open-loop)
+                predicted_belief = copy(team_belief)
+                belief_updates = settings.meeting_interval//settings.process_update
                 for _ in range(belief_updates):
                     predicted_belief = update_belief(sim.group, predicted_belief, True, dict(), settings)
 
@@ -122,13 +125,13 @@ if __name__ == '__main__':
                     locations = list(zip(locations_r, locations_c))
 
                     if len(locations) == 1:
-                        meeting = locations[0]
+                        chosen_location = locations[0]
                     else:
                         np.random.shuffle(locations)
                         options = [(weights[r, c], (r, c)) for (r, c) in locations]
-                        meeting = max(options, key=itemgetter(0))[1]
+                        chosen_location = max(options, key=itemgetter(0))[1]
 
-                    meetings[agent.label] = meeting
+                    meetings[agent.label] = chosen_location
                     conditional_entropy = update_information(conditional_entropy, meeting, settings)
 
                 for label in meetings.keys():
@@ -140,26 +143,31 @@ if __name__ == '__main__':
                     weights = sn.filters.convolve(conditional_entropy,
                                                   np.ones(settings.image_size),
                                                   mode='constant', cval=0)
-                    plans[agent.label] = []
+
                     agent_path = graph_search(agent.position, agent.first, agent.budget, weights, settings)[0]
 
                     for location in agent_path:
                         conditional_entropy = update_information(conditional_entropy, location, settings)
 
-                    plans[agent.label].extend(agent_path)
+                    plans[agent.label] = agent_path
 
+                # update team belief using all observations
+                advance = False
+                team_observation = set()
                 for agent in team.values():
                     # update position
                     agent.position = plans[agent.label][0]
 
                     # update agent belief
                     _, observation = get_image(agent, sim, settings)
-                    advance = False
-                    if t > 1 and (t - 1) % settings.process_update == 0:
-                        advance = True
-                    agent.belief = update_belief(sim.group, agent.belief, advance, observation, settings, control=None)
+                    team_belief = update_belief(sim.group, team_belief, advance, observation, settings, control=None)
+
+                if t > 1 and (t-1)%settings.process_update == 0:
+                    advance = True
+                    team_belief = update_belief(sim.group, team_belief, advance, dict(), settings, control=None)
 
             else:
+
                 for agent in team.values():
 
                     # predict belief forward (open-loop)
@@ -201,7 +209,7 @@ if __name__ == '__main__':
                     if len(locations) == 1:
                         meeting = locations[0]
                     else:
-                        np.random.shuffle(locations)
+                        # np.random.shuffle(locations)
                         options = [(weights[r, c], (r, c)) for (r, c) in locations]
                         meeting = max(options, key=itemgetter(0))[1]
 
