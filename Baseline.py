@@ -132,7 +132,7 @@ if __name__ == '__main__':
                         chosen_location = max(options, key=itemgetter(0))[1]
 
                     meetings[agent.label] = chosen_location
-                    conditional_entropy = update_information(conditional_entropy, meeting, settings)
+                    conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
 
                 for label in meetings.keys():
                     team[label].first = meetings[label]
