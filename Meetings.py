@@ -6,6 +6,7 @@ import sys
 import time
 
 from filter import merge_beliefs, update_belief, get_image
+from metrics import compute_accuracy, compute_coverage, compute_frequency
 from scheduling import schedule_initial_meetings, schedule_next_meeting, \
     create_joint_plan, create_solo_plan, compute_entropy
 from uav import UAV
@@ -16,33 +17,6 @@ sys.path.insert(0, base_path + '/simulators')
 from fires.LatticeForest import LatticeForest
 
 
-def compute_accuracy(belief, true_state, config):
-    accuracy = 0
-    for key in belief.keys():
-        if np.argmax(belief[key]) == true_state[key[0], key[1]]:
-            accuracy += 1
-
-    return accuracy/(config.dimension**2)
-
-
-def compute_frequency(team, true_state, data):
-    unique = list()
-    for agent in team.values():
-        if agent.position not in unique and true_state[agent.position[0], agent.position[1]] == 1:
-            data[agent.position[0], agent.position[1]] += 1
-            unique.append(data)
-
-
-def compute_coverage(team, sim_object, state, settings):
-    team_observation = set()
-    for agent in team.values():
-        _, observation = get_image(agent, sim_object, settings)
-        agent_observation = {key for key in observation.keys() if state[key[0], key[1]] == 1}
-        team_observation |= agent_observation
-
-    return len(team_observation)/len(sim_object.fires)
-
-
 if __name__ == '__main__':
     print('[Meetings] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
@@ -50,7 +24,7 @@ if __name__ == '__main__':
     total_iterations = 61
     seed = 0 + 10
     np.random.seed(seed)
-    settings = Config(process_update=1, team_size=2, meeting_interval=8, measure_correct=0.95)
+    settings = Config(process_update=1, team_size=5, meeting_interval=8, measure_correct=0.95)
     settings.seed = seed
 
     # initialize simulator
@@ -117,8 +91,8 @@ if __name__ == '__main__':
             team[k].first = position
 
     # deploy remaining agents that do not have a meeting in S
+    offset = len(S)+1
     for agent in team.values():
-        offset = len(S)+1
         if agent.position is None:
             idx = np.unravel_index(offset, (square_size, square_size), order='C')
             agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
