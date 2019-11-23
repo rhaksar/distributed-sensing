@@ -177,16 +177,17 @@ if __name__ == '__main__':
                             options.append((v, end))
 
                         options = [end[1] for end in options if end[0] >= 0.9*highest_weight]
-                        # np.random.shuffle(options)
+                        np.random.shuffle(options)
                         chosen_location = options[0]
 
                     agent.first = chosen_location
 
-                    conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
+                    # conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
+                    conditional_entropy[chosen_location[0], chosen_location[1]] = 0
 
                 # perform sequential allocation to generate paths
-                conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
-                conditional_entropy += 0.1
+                # conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
+                # conditional_entropy += 0.1
 
                 for agent in team.values():
                     weights = sn.filters.convolve(conditional_entropy,
@@ -196,7 +197,8 @@ if __name__ == '__main__':
                     agent_path = graph_search(agent.position, agent.first, agent.budget, weights, settings)[0]
 
                     for location in agent_path:
-                        conditional_entropy = update_information(conditional_entropy, location, settings)
+                        # conditional_entropy = update_information(conditional_entropy, location, settings)
+                        conditional_entropy[location[0], location[1]] = 0
 
                     agent.plan = agent_path[1:]
 
