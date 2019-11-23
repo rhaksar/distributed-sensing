@@ -24,7 +24,7 @@ if __name__ == '__main__':
     total_simulations = 10
     offset = 10
     rho = 1
-    total_iterations = 61
+    total_iterations = rho*60 + 1
 
     if len(sys.argv) != 3:
         tau = 4
@@ -34,7 +34,7 @@ if __name__ == '__main__':
         C = int(sys.argv[2])
 
     pc = 0.95
-    print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
+    print('[Benchmark] rho = ' + str(rho) + ', tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
@@ -160,6 +160,9 @@ if __name__ == '__main__':
             # update agent position
             for agent in team.values():
                 agent.plan = create_solo_plan(agent, sim.group, settings)
+                # print('agent {0:d}: {1} -> {2} -> ... -> {3}'.format(agent.label, agent.position,
+                #                                                      agent.plan[0], agent.first))
+
                 agent.position = agent.plan[0]
                 for other_label in agent.other_plans.keys():
                     if not agent.other_plans[other_label]:
@@ -180,7 +183,9 @@ if __name__ == '__main__':
                 sim.update()
 
             state = sim.dense_state()
-            save_data[seed]['coverage'].append(compute_coverage(team, sim, state, settings))
+            current_coverage = compute_coverage(team, sim, state, settings)
+            # print('time {0:d} coverage = {1:0.4f}'.format(t, current_coverage))
+            save_data[seed]['coverage'].append(current_coverage)
             # compute_frequency(team, state, frequency)
             # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 

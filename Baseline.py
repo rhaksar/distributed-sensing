@@ -36,7 +36,7 @@ if __name__ == '__main__':
     total_simulations = 10
     offset = 10
     rho = 1
-    total_iterations = 61
+    total_iterations = rho*60 + 1
     tau = 8
 
     if len(sys.argv) != 3:
@@ -45,7 +45,7 @@ if __name__ == '__main__':
         C = int(sys.argv[2])
 
     pc = 0.95
-    print('[Baseline] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
+    print('[Baseline] rho = ' + str(rho) + ', tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
@@ -186,8 +186,8 @@ if __name__ == '__main__':
                     conditional_entropy[chosen_location[0], chosen_location[1]] = 0
 
                 # perform sequential allocation to generate paths
-                # conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
-                # conditional_entropy += 0.1
+                conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
+                conditional_entropy += 0.1
 
                 for agent in team.values():
                     weights = sn.filters.convolve(conditional_entropy,
@@ -295,7 +295,7 @@ if __name__ == '__main__':
 
             state = sim.dense_state()
             current_coverage = compute_coverage(team, sim, state, settings)
-            # print('current coverage = {0:0.4f}'.format(current_coverage))
+            # print('time {0:d} coverage = {1:0.4f}'.format(t, current_coverage))
             save_data[seed]['coverage'].append(current_coverage)
             # compute_frequency(team, state, frequency)
             # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
