@@ -32,9 +32,14 @@ if __name__ == '__main__':
     total_simulations = 10
     offset = 10
     rho = 1
-    total_iterations = 3
+    total_iterations = 61
     tau = 8
-    C = 2
+
+    if len(sys.argv) < 2:
+        C = 2
+    else:
+        C = int(sys.argv[1])
+
     pc = 0.95
     print('[Baseline] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 

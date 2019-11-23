@@ -25,8 +25,14 @@ if __name__ == '__main__':
     offset = 10
     rho = 1
     total_iterations = 61
-    tau = 4
-    C = 2
+
+    if len(sys.argv) < 3:
+        tau = 4
+        C = 2
+    else:
+        tau = int(sys.argv[1])
+        C = int(sys.argv[2])
+
     pc = 0.95
     print('[Benchmark] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
