@@ -218,7 +218,7 @@ if __name__ == '__main__':
                 advance = False
                 if t > 1 and (t-1)%settings.process_update == 0:
                     advance = True
-                team_belief = update_belief(sim.group, team_belief, advance, dict(), settings, control=None)
+                team_belief = update_belief(sim.group, team_belief, advance, team_observation, settings, control=None)
 
                 # exact belief at each time step
                 # team_belief = dict()
