@@ -23,7 +23,7 @@ if __name__ == '__main__':
     print('[Baseline] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    communication = False
+    communication = True
     if communication:
         print('[Baseline]     with communication')
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
                 # find locations of high entropy and use them as planned locations
                 conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
                 conditional_entropy += 0.1
-                meetings = dict()
+                team_locations = dict()
 
                 for agent in team.values():
 
@@ -131,11 +131,12 @@ if __name__ == '__main__':
                         options = [(weights[r, c], (r, c)) for (r, c) in locations]
                         chosen_location = max(options, key=itemgetter(0))[1]
 
-                    meetings[agent.label] = chosen_location
+                    team_locations[agent.label] = chosen_location
                     conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
 
-                for label in meetings.keys():
-                    team[label].first = meetings[label]
+                for label in team_locations.keys():
+                    team[label].first = team_locations[label]
+                    print('agent ' + str(label) + ' chose location ' + str(team_locations[label]))
 
                 # perform sequential allocation to generate paths, using previous entropy field
                 plans = dict()
