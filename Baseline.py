@@ -32,7 +32,7 @@ if __name__ == '__main__':
     total_simulations = 10
     offset = 10
     rho = 1
-    total_iterations = 61
+    total_iterations = 3
     tau = 8
     C = 2
     pc = 0.95
@@ -138,7 +138,7 @@ if __name__ == '__main__':
 
                         highest_weight = -1
                         for end in locations:
-                            _, v = graph_search(agent.position, agent.first, config.meeting_interval, weights, config)
+                            _, v = graph_search(agent.position, end, settings.meeting_interval, weights, settings)
 
                             if v > highest_weight:
                                 highest_weight = v
