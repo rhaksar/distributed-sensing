@@ -130,9 +130,23 @@ if __name__ == '__main__':
                     if len(locations) == 1:
                         chosen_location = locations[0]
                     else:
-                        np.random.shuffle(locations)
-                        options = [(weights[r, c], (r, c)) for (r, c) in locations]
-                        chosen_location = max(options, key=itemgetter(0))[1]
+                        # np.random.shuffle(locations)
+                        # options = [(weights[r, c], (r, c)) for (r, c) in locations]
+                        # chosen_location = max(options, key=itemgetter(0))[1]
+
+                        options = []
+
+                        highest_weight = -1
+                        for end in locations:
+                            _, v = graph_search(agent.position, agent.first, config.meeting_interval, weights, config)
+
+                            if v > highest_weight:
+                                highest_weight = v
+                            options.append((v, end))
+
+                        options = [end[1] for end in options if end[0] >= 0.9*highest_weight]
+                        np.random.shuffle(options)
+                        chosen_location = options[0]
 
                     team_locations[agent.label] = chosen_location
                     conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
