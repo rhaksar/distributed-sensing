@@ -23,7 +23,11 @@ if __name__ == '__main__':
     print('[Baseline] started at %s' % (time.strftime('%d-%b-%Y %H:%M')))
     tic = time.clock()
 
-    communication = True
+    if len(sys.argv) != 3:
+        communication = True
+    else:
+        communication = bool(int(sys.argv[1]))
+
     if communication:
         print('[Baseline]     team communication')
     else:
@@ -35,10 +39,10 @@ if __name__ == '__main__':
     total_iterations = 61
     tau = 8
 
-    if len(sys.argv) < 2:
-        C = 2
+    if len(sys.argv) != 3:
+        C = 5
     else:
-        C = int(sys.argv[1])
+        C = int(sys.argv[2])
 
     pc = 0.95
     print('[Baseline] tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
@@ -159,7 +163,10 @@ if __name__ == '__main__':
                 for label in team_locations.keys():
                     team[label].first = team_locations[label]
 
-                # perform sequential allocation to generate paths, using previous entropy field
+                # perform sequential allocation to generate paths
+                conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
+                conditional_entropy += 0.1
+
                 plans = dict()
                 for agent in team.values():
                     weights = sn.filters.convolve(conditional_entropy,
@@ -193,7 +200,7 @@ if __name__ == '__main__':
                 for agent in team.values():
 
                     # predict belief forward (open-loop)
-                    predicted_belief = agent.belief
+                    predicted_belief = copy(agent.belief)
                     belief_updates = settings.meeting_interval//settings.process_update
                     for _ in range(belief_updates):
                         predicted_belief = update_belief(sim.group, predicted_belief, True, dict(), settings)

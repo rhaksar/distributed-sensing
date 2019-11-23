@@ -26,7 +26,7 @@ if __name__ == '__main__':
     rho = 1
     total_iterations = 61
 
-    if len(sys.argv) < 3:
+    if len(sys.argv) != 3:
         tau = 4
         C = 2
     else:
