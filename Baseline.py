@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
         # main loop
         for t in range(1, total_iterations):
-           #  print('time {0:d}'.format(t))
+            # print('time {0:d}'.format(t))
 
             if communication:
                 # print('communication')
@@ -207,15 +207,18 @@ if __name__ == '__main__':
                     agent.position = agent.plan[0]
 
                 # update team belief using all observations
-                advance = False
-                team_observation = set()
+                team_observation = dict()
                 for agent in team.values():
                     _, observation = get_image(agent, sim, settings)
-                    team_belief = update_belief(sim.group, team_belief, advance, observation, settings, control=None)
+                    for key in observation.keys():
+                        if key not in team_observation:
+                            team_observation[key] = []
+                        team_observation[key].append(observation[key])
 
+                advance = False
                 if t > 1 and (t-1)%settings.process_update == 0:
                     advance = True
-                    team_belief = update_belief(sim.group, team_belief, advance, dict(), settings, control=None)
+                team_belief = update_belief(sim.group, team_belief, advance, dict(), settings, control=None)
 
                 # exact belief at each time step
                 # team_belief = dict()
