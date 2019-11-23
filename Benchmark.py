@@ -179,13 +179,17 @@ if __name__ == '__main__':
             # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
         # save_data[seed][total_iterations] = frequency
-        print('[Benchmark] finished simulation ' + str(sim_count+1) 
-              + ' (coverage = ' + str(np.mean(save_data[seed]['coverage'])) + ')')
+        print('[Benchmark] finished simulation {0:d} (coverage = {1:0.4f})'.format(sim_count+1,
+                                                                                   np.mean(save_data[seed]['coverage'])))
 
     # write data to file
-    filename = 'Benchmark/benchmark-' + 'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'
+    filename = 'Benchmark/benchmark-' + 'rho' + str(rho).zfill(2) + \
+               'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'
     with open(filename, 'wb') as handle:
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    print('[Benchmark] mean coverage = {0:0.4f}'.format(np.mean([np.mean(save_data[seed]['coverage'])
+                                                                 for seed in save_data.keys()])))
 
     toc = time.clock()
     dt = toc - tic

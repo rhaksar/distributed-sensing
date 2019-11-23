@@ -25,7 +25,9 @@ if __name__ == '__main__':
 
     communication = True
     if communication:
-        print('[Baseline]     with communication')
+        print('[Baseline]     team communication')
+    else:
+        print('[Baseline]     no communication')
 
     total_simulations = 10
     offset = 10
@@ -77,6 +79,7 @@ if __name__ == '__main__':
         team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
                 for i in range(settings.team_size)}
 
+        team_belief = None
         if communication:
             team_belief = copy(initial_belief)
 
@@ -136,7 +139,6 @@ if __name__ == '__main__':
 
                 for label in team_locations.keys():
                     team[label].first = team_locations[label]
-                    print('agent ' + str(label) + ' chose location ' + str(team_locations[label]))
 
                 # perform sequential allocation to generate paths, using previous entropy field
                 plans = dict()
@@ -157,7 +159,7 @@ if __name__ == '__main__':
                 team_observation = set()
                 for agent in team.values():
                     # update position
-                    agent.position = plans[agent.label][0]
+                    agent.position = plans[agent.label][1]
 
                     # update agent belief
                     _, observation = get_image(agent, sim, settings)
@@ -237,8 +239,8 @@ if __name__ == '__main__':
             # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
         # save_data[seed][total_iterations] = frequency
-        print('[Baseline] finished simulation ' + str(sim_count+1) +
-              ' (coverage = ' + str(np.mean(save_data[seed]['coverage'])) + ')')
+        print('[Baseline] finished simulation {0:d} (coverage = {1:0.4f})'.format(sim_count+1,
+                                                                                  np.mean(save_data[seed]['coverage'])))
 
     # write data to file
     filename = 'Benchmark/baseline-'
@@ -246,10 +248,13 @@ if __name__ == '__main__':
         filename += 'ycomm-'
     else:
         filename += 'ncomm-'
-    filename += 'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'
+    filename += 'rho' + str(rho).zfill(2) + 'tau' + str(tau).zfill(2) + 'C' + str(C).zfill(2) + 'pc' + str(pc) + '.pkl'
 
     with open(filename, 'wb') as handle:
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    print('[Baseline] mean coverage = {0:0.4f}'.format(np.mean([np.mean(save_data[seed]['coverage'])
+                                                                for seed in save_data.keys()])))
 
     toc = time.clock()
     dt = toc - tic
