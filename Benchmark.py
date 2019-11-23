@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     for sim_count, seed in enumerate(range(offset, total_simulations+offset)):
         np.random.seed(seed)
-        sim.seed = seed
+        sim.rng = seed
         sim.reset()
         save_data[seed] = dict()
 
