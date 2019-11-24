@@ -8,7 +8,7 @@ import sys
 import time
 
 from filter import merge_beliefs, update_belief, get_image
-from metrics import compute_coverage
+from metrics import compute_coverage, compute_accuracy
 from scheduling import schedule_initial_meetings, create_solo_plan, \
     compute_conditional_entropy, graph_search, update_information
 from uav import UAV
@@ -48,6 +48,8 @@ if __name__ == '__main__':
     print('[Baseline] rho = ' + str(rho) + ', tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
+    if communication:
+        settings.regularization_weight = 1e-5
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
     # square_size = np.ceil(np.sqrt(settings.team_size)).astype(int)
     S = []
