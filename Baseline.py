@@ -48,8 +48,6 @@ if __name__ == '__main__':
     print('[Baseline] rho = ' + str(rho) + ', tau = ' + str(tau) + ', C = ' + str(C) + ', pc = ' + str(pc))
 
     settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
-    if communication:
-        settings.regularization_weight = 1e-5
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
     # square_size = np.ceil(np.sqrt(settings.team_size)).astype(int)
     S = []
@@ -148,67 +146,69 @@ if __name__ == '__main__':
                 for _ in range(belief_updates):
                     predicted_belief = update_belief(sim.group, predicted_belief, True, dict(), settings)
 
-                # find locations of high entropy and use them as planned locations
-                conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
-                conditional_entropy += 0.1
+                if (t-1) % settings.meeting_interval == 0:
+                    # find locations of high entropy and use them as planned locations
+                    conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
+                    conditional_entropy += 0.1
 
-                for agent in team.values():
+                    for agent in team.values():
 
-                    weights = sn.filters.convolve(conditional_entropy,
-                                                  np.ones(settings.image_size),
-                                                  mode='constant', cval=0)
+                        weights = sn.filters.convolve(conditional_entropy,
+                                                      np.ones(settings.image_size),
+                                                      mode='constant', cval=0)
 
-                    distances = np.linalg.norm(node_locations - agent.position, ord=np.inf, axis=2)
-                    locations_r, locations_c = np.where(distances == settings.meeting_interval)
-                    locations = list(zip(locations_r, locations_c))
+                        distances = np.linalg.norm(node_locations - agent.position, ord=np.inf, axis=2)
+                        locations_r, locations_c = np.where(distances == settings.meeting_interval)
+                        locations = list(zip(locations_r, locations_c))
 
-                    if len(locations) == 1:
-                        chosen_location = locations[0]
-                    else:
-                        # np.random.shuffle(locations)
-                        # options = [(weights[r, c], (r, c)) for (r, c) in locations]
-                        # chosen_location = max(options, key=itemgetter(0))[1]
+                        if len(locations) == 1:
+                            chosen_location = locations[0]
+                        else:
+                            # np.random.shuffle(locations)
+                            # options = [(weights[r, c], (r, c)) for (r, c) in locations]
+                            # chosen_location = max(options, key=itemgetter(0))[1]
 
-                        options = []
-                        highest_weight = -1
-                        for end in locations:
-                            _, v = graph_search(agent.position, end, settings.meeting_interval, weights, settings)
+                            options = []
+                            highest_weight = -1
+                            for end in locations:
+                                _, v = graph_search(agent.position, end, settings.meeting_interval, weights, settings)
 
-                            if v > highest_weight:
-                                highest_weight = v
-                            options.append((v, end))
+                                if v > highest_weight:
+                                    highest_weight = v
+                                options.append((v, end))
 
-                        options = [end[1] for end in options if end[0] >= 0.9*highest_weight]
-                        np.random.shuffle(options)
-                        chosen_location = options[0]
+                            options = [end[1] for end in options if end[0] >= 0.9*highest_weight]
+                            np.random.shuffle(options)
+                            chosen_location = options[0]
 
-                    agent.first = chosen_location
+                        agent.first = chosen_location
 
-                    # conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
-                    conditional_entropy[chosen_location[0], chosen_location[1]] = 0
+                        # conditional_entropy = update_information(conditional_entropy, chosen_location, settings)
+                        conditional_entropy[chosen_location[0], chosen_location[1]] = 0
 
-                # perform sequential allocation to generate paths
-                conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
-                conditional_entropy += 0.1
+                    # perform sequential allocation to generate paths
+                    conditional_entropy = compute_conditional_entropy(predicted_belief, sim.group, settings)
+                    conditional_entropy += 0.1
 
-                for agent in team.values():
-                    weights = sn.filters.convolve(conditional_entropy,
-                                                  np.ones(settings.image_size),
-                                                  mode='constant', cval=0)
+                    for agent in team.values():
+                        weights = sn.filters.convolve(conditional_entropy,
+                                                      np.ones(settings.image_size),
+                                                      mode='constant', cval=0)
 
-                    agent_path = graph_search(agent.position, agent.first, agent.budget, weights, settings)[0]
+                        agent_path = graph_search(agent.position, agent.first, agent.budget, weights, settings)[0]
 
-                    for location in agent_path:
-                        # conditional_entropy = update_information(conditional_entropy, location, settings)
-                        conditional_entropy[location[0], location[1]] = 0
+                        for location in agent_path:
+                            # conditional_entropy = update_information(conditional_entropy, location, settings)
+                            conditional_entropy[location[0], location[1]] = 0
 
-                    agent.plan = agent_path[1:]
+                        agent.plan = agent_path[1:]
 
                 for agent in team.values():
                     # print('agent {0:d}: {1} -> {2} -> ... -> {3}'.format(agent.label, agent.position,
                     #                                                      agent.plan[0], agent.first))
 
                     agent.position = agent.plan[0]
+                    agent.plan.pop(0)
 
                 # update team belief using all observations
                 team_observation = dict()
