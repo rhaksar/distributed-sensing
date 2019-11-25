@@ -21,6 +21,7 @@ if __name__ == '__main__':
     robot_set = [2, 5, 10, 20]
     ax.set_xlim([0, 21])
     ax.set_xticks([2, 5, 10, 15, 20])
+    ax.set_ylim([0, 40])
     directory = '/home/ravi/Desktop/Benchmark/'
 
     for tau in tau_set:
