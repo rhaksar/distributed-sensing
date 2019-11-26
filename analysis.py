@@ -9,20 +9,24 @@ if __name__ == '__main__':
     figure = pyplot.figure()
     ax = figure.add_subplot('111')
     ax.grid()
-    ax.set_xlabel('Number of Agents', fontsize=16)
-    ax.set_ylabel('Fire Coverage (\%)', fontsize=16)
-    ax.tick_params(axis='x', labelsize=14)
-    ax.tick_params(axis='y', labelsize=14)
 
-    error_alpha = 0.75
+    error_alpha = 1
+    msize = 12
+    csize = 5
+    lwidth = 1.5
 
-    rho = 2
+    rho = 1
     tau_set = [4, 8, 12]
     robot_set = [2, 5, 10, 20]
     ax.set_xlim([0, 21])
     ax.set_xticks([2, 5, 10, 15, 20])
     ax.set_ylim([0, 40])
     directory = '/home/ravi/Desktop/Benchmark/'
+
+    ax.set_xlabel('Number of Agents', fontsize=18)
+    ax.set_ylabel('Fire Coverage (\%)', fontsize=18)
+    ax.tick_params(axis='x', labelsize=15)
+    ax.tick_params(axis='y', labelsize=15)
 
     for tau in tau_set:
         benchmark_data = []
@@ -41,10 +45,11 @@ if __name__ == '__main__':
             benchmark_error[0, idx] = np.median(data) - np.percentile(data, 25)
             benchmark_error[1, idx] = np.percentile(data, 75) - np.median(data)
 
-        makers, caps, bars = ax.errorbar(robot_set, benchmark_data, yerr=benchmark_error, Marker='.', Markersize=6, capsize=3,
-                                         label=r'$\tau = ' + str(tau) + '$')
+        makers, caps, bars = ax.errorbar(robot_set, benchmark_data, yerr=benchmark_error, Marker='.', Markersize=msize,
+                                         capsize=csize, linewidth=lwidth, label=r'$\tau = ' + str(tau) + '$')
         [bar.set_alpha(error_alpha) for bar in bars]
         [cap.set_alpha(error_alpha) for cap in caps]
+        [cap.set_markeredgewidth(1.05 * lwidth) for cap in caps]
 
     tau = 8
     baseline_ncomm_data = []
@@ -62,11 +67,11 @@ if __name__ == '__main__':
         baseline_ncomm_error[0, idx] = np.median(data) - np.percentile(data, 25)
         baseline_ncomm_error[1, idx] = np.percentile(data, 75) - np.median(data)
 
-    makers, caps, bars = ax.errorbar(robot_set, baseline_ncomm_data, yerr=baseline_ncomm_error,
-                                     Marker='.', Markersize=6, capsize=3,
-                                     label=r'no comm.')
+    makers, caps, bars = ax.errorbar(robot_set, baseline_ncomm_data, yerr=baseline_ncomm_error, linewidth=lwidth,
+                                     Marker='.', Markersize=msize, capsize=csize, label=r'no comm.')
     [bar.set_alpha(error_alpha) for bar in bars]
     [cap.set_alpha(error_alpha) for cap in caps]
+    [cap.set_markeredgewidth(1.05 * lwidth) for cap in caps]
 
     baseline_ycomm_data = []
     baseline_ycomm_error = np.zeros((2, len(robot_set)))
@@ -83,14 +88,16 @@ if __name__ == '__main__':
         baseline_ycomm_error[0, idx] = np.median(data) - np.percentile(data, 25)
         baseline_ycomm_error[1, idx] = np.percentile(data, 75) - np.median(data)
 
-    makers, caps, bars = ax.errorbar(robot_set, baseline_ycomm_data, yerr=baseline_ycomm_error,
-                                     Marker='.', Markersize=6, capsize=3,
-                                     label=r'team comm.')
+    makers, caps, bars = ax.errorbar(robot_set, baseline_ycomm_data, yerr=baseline_ycomm_error, linewidth=lwidth,
+                                     Marker='.', Markersize=msize, capsize=csize, label=r'team comm.',
+                                     elinewidth=lwidth)
     [bar.set_alpha(error_alpha) for bar in bars]
     [cap.set_alpha(error_alpha) for cap in caps]
+    [cap.set_markeredgewidth(1.05*lwidth) for cap in caps]
 
-    ax.legend(fontsize=14, ncol=2)
+    if 1 == rho:
+        ax.legend(fontsize=17, ncol=2)
 
     pyplot.savefig('performance_' + str(rho).zfill(2) + '.pdf', dpi=300, bbox_inches='tight')
-    pyplot.show()
+    # pyplot.show()
 
