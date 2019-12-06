@@ -273,8 +273,8 @@ def schedule_next_meeting_squence():
         for idx, agent in enumerate(sub_team):
             color = 'C3' if idx == 0 else 'C1'
             x, y = rc_to_xy(settings.dimension, agent.position)  # + settings.cell_side_length
-            x += 0.2 * np.cos(idx * np.pi)
-            y += 0.2 * np.sin(idx * np.pi)
+            x += 0.2*np.cos(idx*np.pi)
+            y += 0.2*np.sin(idx*np.pi)
             axis.plot(x, y, linestyle='', Marker='o', MarkerSize=ms, Color=color)
 
             x, y = rc_to_xy(settings.dimension, agent.last)
@@ -293,9 +293,12 @@ def schedule_next_meeting_squence():
                     x1 += 0.2*np.cos(idx*np.pi)
                     y1 += 0.2*np.sin(idx*np.pi)
                 x2, y2 = rc_to_xy(settings.dimension, plans[label][i+1])
-                axis.plot([x1, x2], [y1, y2], linestyle='-', linewidth=2, color=color, zorder=1)
+                if i < settings.meeting_interval:
+                    axis.plot([x1, x2], [y1, y2], linestyle='-', linewidth=2, color=color, zorder=1)
+                else:
+                    axis.plot([x1, x2], [y1, y2], linestyle=':', linewidth=2, color=color, zorder=1)
 
-        pyplot.savefig(folder + 'joint_path_planning_'+str(iteration+2)+'.pdf', dpi=300, bbox_inches='tight')
+        pyplot.savefig(folder + 'joint_path_planning_' + str(iteration+2) + '.pdf', dpi=300, bbox_inches='tight')
 
     # pyplot.show()
 
