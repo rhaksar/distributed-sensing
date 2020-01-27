@@ -6,18 +6,29 @@ class UAV(object):
     def __init__(self, label=None, position=None, belief=None, image_size=None):
         self.label = label
         # self.deployed = False
-        self.time = 1
 
         self.position = position
-        self.next_position = None
 
         self.image_size = image_size
         self.belief = belief
-        # self.MImetric = None
 
-        self.meetings = []
+        self.budget = None
+        self.first = None
+        self.last = None
+
+        # self.meetings = []
         self.plan = []
         self.other_plans = dict()
+
+    def __repr__(self):
+        return 'UAV(\'label\': ' + str(self.label) + ', \'position\': ' + str(self.position) + ', \'first\': ' + \
+               str(self.first) + ', \'last\': ' + str(self.last) + ', \'budget\': ' + str(self.budget) + \
+               ', \'plan\': ' + str(self.plan) + ', \'other_plans\': ' + str(self.other_plans) + ')'
+
+    def __str__(self):
+        return 'UAV ' + str(self.label) + '\n' + 'position: ' + str(self.position) + '\n' + 'first: ' + \
+               str(self.first) + '\n' + 'last: ' + str(self.last) + '\n' + 'budget: ' + str(self.budget) + \
+               '\n' + 'plan: ' + str(self.plan) + '\n' + 'other plans: ' + str(self.other_plans)
 
     # def deploy(self, time, config):
     #     if self.deployed:

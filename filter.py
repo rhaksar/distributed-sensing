@@ -15,7 +15,7 @@ def measure_model(element, state, observation, config):
 
 
 def multiply_probabilities(values):
-    threshold = 1e-20  # determines the smallest non-zero probability
+    threshold = 1e-150  # determines the smallest non-zero probability
     if any([v < threshold for v in values]):
         return 0
     else:
@@ -60,16 +60,16 @@ def merge_beliefs(sub_team):
         merged[key] /= np.sum(merged[key])
         # assert np.sum(merged[key]) == 1
 
-    for agent in sub_team:
-        agent.belief = copy(merged)
-    return
+    # for agent in sub_team:
+    #     agent.belief = copy(merged)
+    return merged
 
 
 def update_belief(simulation_group, prior, advance, observation, config, control=None):
     if control is None:
         control = defaultdict(lambda: (0, 0))
 
-    posterior = copy(prior)
+    posterior = dict()
     for key in simulation_group.keys():
         element = simulation_group[key]
         element_posterior = np.zeros(len(element.state_space))
@@ -105,7 +105,11 @@ def update_belief(simulation_group, prior, advance, observation, config, control
 
         for x_t in element.state_space:
             if key in observation.keys():
-                element_posterior[x_t] *= measure_model(element, x_t, observation[key], config)
+                if type(observation[key]) == int:
+                    element_posterior[x_t] *= measure_model(element, x_t, observation[key], config)
+                elif type(observation[key]) == list:
+                    element_posterior[x_t] *= np.prod([measure_model(element, x_t, obs, config)
+                                                       for obs in observation[key]])
             elif advance:
                 weight = config.regularization_weight
                 mean = np.mean(element_posterior)

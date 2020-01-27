@@ -27,28 +27,25 @@ def xy_to_rc(y_limit, xy):
 
 class Config(object):
 
-    def __init__(self):
+    def __init__(self, process_update=2, team_size=5, meeting_interval=5, measure_correct=0.95):
         self.seed = None
         self.dimension = 25
 
-        self.estimate_process_update = 10
-        self.true_process_update = 10
+        self.process_update = process_update
         self.regularization_weight = 0
 
         self.cell_side_length = 0.5
+        self.corner = xy_to_rc(self.dimension, np.array([1.5, 1.5]) - self.cell_side_length)
 
-        # cx = np.linspace(0, self.dimension-1, self.dimension) + 0.5
-        # cy = np.linspace(0, self.dimension-1, self.dimension) + 0.5
-        # Cx, Cy = np.meshgrid(cx, cy)
-        # self.Cxy = np.stack([Cx, Cy], axis=2) # .reshape((self.dimension*self.dimension, 2))
-
-        self.team_size = 6
+        self.team_size = team_size
         self.image_size = (3, 3)
         self.half_height, self.half_width = (self.image_size[0]-1)//2, (self.image_size[1]-1)//2
 
+        self.movements = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 0), (0, 1), (1, -1), (1, 0), (1, 1)]
+
         # self.deploy_interval = 2
         # self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
-        self.meeting_interval = 15
-        self.total_interval = None
+        self.meeting_interval = meeting_interval
 
-        self.measure_correct = 0.95
+        self.measure_correct = measure_correct
+

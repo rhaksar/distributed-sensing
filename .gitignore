@@ -129,6 +129,7 @@ dmypy.json
 # Subfolders
 REINFORCE/
 sim_images
+Benchmark
 
 # Documents
 *.pdf
