@@ -1,20 +1,17 @@
 from copy import copy
 import numpy as np
-import os
 import pickle
 import sys
 import time
 
-from filter import merge_beliefs, update_belief, get_image
-from metrics import compute_coverage
-from scheduling import schedule_initial_meetings, schedule_next_meeting, \
+from framework.filter import merge_beliefs, update_belief, get_image
+from framework.metrics import compute_coverage
+from framework.scheduling import schedule_initial_meetings, schedule_next_meeting, \
     create_joint_plan, create_solo_plan
-from uav import UAV
-from utilities import Config
+from framework.uav import UAV
+from framework.utilities import Config
 
-base_path = os.path.dirname(os.getcwd())
-sys.path.insert(0, base_path + '/simulators')
-from fires.LatticeForest import LatticeForest
+from simulators.fires.LatticeForest import LatticeForest
 
 
 if __name__ == '__main__':

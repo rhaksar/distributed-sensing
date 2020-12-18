@@ -1,17 +1,10 @@
-# from collections import defaultdict
-# from copy import copy
-# import graph_tool as gt
-# import graph_tool.search as gts
-# import heapq
 import networkx as nx
 import numpy as np
 from operator import itemgetter
-# from queue import PriorityQueue
 import scipy.ndimage as sn
 import scipy.stats as ss
-import time
 
-from filter import update_belief, measure_model
+from framework.filter import update_belief, measure_model
 
 
 def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, config):
