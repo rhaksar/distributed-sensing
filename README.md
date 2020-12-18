@@ -18,20 +18,15 @@ Paper citation:
   pages={3027-3034},}
 ```
 
-### Requirements
+## Requirements:
 - Developed with Python 3.6
 - Requires the `numpy` and `networkx` packages
 - Requires the [simulators](https://github.com/rhaksar/simulators) repository 
 
-### Files
-- `analysis.py`:
+## Directories:
+- `framework`: 
+
+## Files:
 - `Baseline.py`:
 - `Benchmark.py`:
-- `figures.py`:
-- `filter.py`:
 - `Meetings.py`:
-- `metrics.py`:
-- `plotting.py`:
-- `scheduling.py`:
-- `uav.py`:
-- `utilities.py`:
