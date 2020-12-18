@@ -24,9 +24,9 @@ Paper citation:
 - Requires the [simulators](https://github.com/rhaksar/simulators) repository 
 
 ## Directories:
-- `framework`: 
+- `framework`: Implementation of scheduling and planning framework. 
 
 ## Files:
-- `Baseline.py`:
-- `Benchmark.py`:
-- `Meetings.py`:
+- `Baseline.py`: Implementation of two baseline algorithms to compare against the framework. 
+- `Benchmark.py`: Run many simulations of the framework to evaluate perofrmance. 
+- `Meetings.py`: Run a single simulation of the framework. 
