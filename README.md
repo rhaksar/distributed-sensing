@@ -3,7 +3,7 @@
 A repository to support the paper **Spatial Scheduling of Informative Meetings for Multi-Agent Persistent Coverage**.
 
 Videos:  
-[![click to play](https://img.youtube.com/vi/bVWf2fJ2WRQ/0.jpg)](https://www.youtube.com/watch?v=bVWf2fJ2WRQ)
+[![click to play](https://img.youtube.com/vi/M5Fp8WsmLno/0.jpg)](https://www.youtube.com/watch?v=M5Fp8WsmLno)
 [![click to play](https://img.youtube.com/vi/gLdqK2m3COo/0.jpg)](https://www.youtube.com/watch?v=gLdqK2m3COo)
 
 Paper citation:
