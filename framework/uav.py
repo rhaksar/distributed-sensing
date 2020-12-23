@@ -1,6 +1,6 @@
 class UAV(object):
     """
-    Aerial vehicle definition. 
+    Aerial vehicle definition.
     """
 
     def __init__(self, label, belief, image_size):
