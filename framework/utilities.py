@@ -28,13 +28,13 @@ def xy_to_rc(y_limit, xy):
 class Config(object):
 
     def __init__(self, process_update=2, team_size=5, meeting_interval=5, measure_correct=0.95):
-        self.seed = None
-        self.dimension = 25
+        self.seed = None  # random seed
+        self.dimension = 25  # size of one side of the square forest
 
-        self.process_update = process_update
-        self.regularization_weight = 0
+        self.process_update = process_update  # how often forest fire dynamics update
 
-        self.cell_side_length = 0.5
+        self.cell_side_length = 0.5  # scaling from (row, col) to (x, y)
+        # starting location for deploying UAVs in the forest
         self.corner = xy_to_rc(self.dimension, np.array([1.5, 1.5]) - self.cell_side_length)
 
         self.team_size = team_size
@@ -43,9 +43,8 @@ class Config(object):
 
         self.movements = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 0), (0, 1), (1, -1), (1, 0), (1, 1)]
 
-        # self.deploy_interval = 2
-        # self.deploy_locations = (np.array([1.5, 2.5]), np.array([2.5, 1.5]))
-        self.meeting_interval = meeting_interval
+        self.gamma = 0.9  # scale factor for considering "high-value" meeting locations
+        self.meeting_interval = meeting_interval  # frequency of meetings
 
-        self.measure_correct = measure_correct
-
+        self.measure_correct = measure_correct  # probability of observing the correct tree state
+        self.threshold = 1e-100  # smallest non-zero probability
