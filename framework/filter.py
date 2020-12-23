@@ -1,7 +1,5 @@
 from collections import defaultdict
-from copy import copy
 import numpy as np
-import time
 
 
 def measure_model(element, state, observation, config):
@@ -25,20 +23,21 @@ def measure_model(element, state, observation, config):
         return measure_correct
 
 
-def multiply_probabilities(values):
+def multiply_probabilities(values, config):
     """
     Helper function to multiply a list of probabilities.
 
     :param values: an iterable object containing the probabilities to multiply.
+    :param config: a Config class object containing the minimum non-zero probability.
 
     :return: product of probabilities, which is zero if any value is below a specified threshold.
     """
-    threshold = 1e-150  # determines the smallest non-zero probability
-    if any([v < threshold for v in values]):
+
+    if any([v < config.threshold for v in values]):
         return 0
     else:
         sum_log = sum([np.log(v) for v in values])
-        if sum_log <= np.log(threshold):
+        if sum_log <= np.log(config.threshold):
             return 0
         else:
             return np.exp(sum_log)
@@ -135,8 +134,8 @@ def update_belief(simulation_group, prior, advance, observation, config, control
         # the Tree dynamics are based on the number of neighbors on fire rather than the identity of the neighboring
         # Trees. as a result, iterate over the possible number of Trees on fire to consider different state transitions.
         caf = np.zeros(num_neighbors+1)
-        for l in range(2**num_neighbors):
-            xj = np.base_repr(l, base=2).zfill(num_neighbors)
+        for state_idx in range(2**num_neighbors):
+            xj = np.base_repr(state_idx, base=2).zfill(num_neighbors)
             active = xj.count('1')
 
             values = []
@@ -150,7 +149,7 @@ def update_belief(simulation_group, prior, advance, observation, config, control
 
                 values.append(prob)
 
-            caf[active] += multiply_probabilities(values)
+            caf[active] += multiply_probabilities(values, config)
 
         # perform open-loop dynamics update
         for x_t in element.state_space:
@@ -159,7 +158,7 @@ def update_belief(simulation_group, prior, advance, observation, config, control
                 if advance:
                     for active in range(num_neighbors+1):
                         values = [element.dynamics((x_tm1, active, x_t), control[key]), caf[active], prior[key][x_tm1]]
-                        element_posterior[x_t] += multiply_probabilities(values)
+                        element_posterior[x_t] += multiply_probabilities(values, config)
                 # otherwise, the dynamics are static
                 else:
                     element_posterior[x_t] += (x_t == x_tm1)*prior[key][x_tm1]
