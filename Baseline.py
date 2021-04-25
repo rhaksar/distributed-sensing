@@ -6,10 +6,10 @@ import scipy.ndimage as sn
 import sys
 import time
 
-from framework.filter import merge_beliefs, update_belief, get_image
-from framework.metrics import compute_coverage, compute_accuracy
-from framework.scheduling import schedule_initial_meetings, create_solo_plan, \
-    compute_conditional_entropy, graph_search, update_information
+from framework.filter import update_belief, get_image
+from framework.metrics import compute_coverage
+from framework.scheduling import create_solo_plan, \
+    compute_conditional_entropy, graph_search
 from framework.uav import UAV
 from framework.utilities import Config
 
@@ -46,18 +46,12 @@ if __name__ == '__main__':
 
     settings = Config(process_update=rho, team_size=C, meeting_interval=tau, measure_correct=pc)
     square_size = np.ceil(np.sqrt(settings.team_size/2)).astype(int)
-    # square_size = np.ceil(np.sqrt(settings.team_size)).astype(int)
     S = []
     for i in range(1, np.floor(settings.team_size/2).astype(int)+1):
         S.append((2*i-1, 2*i))
 
     # initialize simulator
     sim = LatticeForest(settings.dimension)
-
-    node_row = np.linspace(0, settings.dimension - 1, settings.dimension)
-    node_col = np.linspace(0, settings.dimension - 1, settings.dimension)
-    node_row, node_col = np.meshgrid(node_row, node_col)
-    node_locations = np.stack([node_row.T, node_col.T], axis=2)
 
     # initialize agents
     initial_belief = dict()
@@ -66,15 +60,6 @@ if __name__ == '__main__':
         # exact belief
         initial_belief[key] = np.zeros(len(element.state_space))
         initial_belief[key][element.state] = 1
-
-        # exact for healthy, uniform otherwise
-        # if element.state == 0:
-        #     initial_belief[key] = np.array([1.0, 0.0, 0.0])
-        # else:
-        #     initial_belief[key] = (1/3)*np.ones(len(element.state_space))
-
-        # uniform uncertainty
-        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
     # initialize data structure for saving information
     save_data = dict()
@@ -92,15 +77,6 @@ if __name__ == '__main__':
         if communication:
             team_belief = copy(initial_belief)
 
-        # deploy all agents at unique locations
-        # offset = 0
-        # for agent in team.values():
-        #     agent.budget = settings.meeting_interval
-        #     if agent.position is None:
-        #         idx = np.unravel_index(offset, (square_size, square_size), order='C')
-        #         agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
-        #         offset += 1
-
         # deploy agents according to schedule S
         for ith_meeting, s in enumerate(S):
             idx = np.unravel_index(ith_meeting, (square_size, square_size), order='C')
@@ -112,18 +88,12 @@ if __name__ == '__main__':
         # deploy remaining agents that do not have a meeting in S
         offset = len(S)+1
         for agent in team.values():
-            if agent.position is None:
+            if not agent.position:
                 idx = np.unravel_index(offset, (square_size, square_size), order='C')
                 agent.position = (settings.corner[0] - idx[0], settings.corner[1] + idx[1])
                 agent.budget = settings.meeting_interval
                 offset += 1
 
-        # for agent in team.values():
-        #     print('agent {0:d} at position {1}'.format(agent.label, agent.position))
-
-        # frequency = np.zeros((settings.dimension, settings.dimension))
-        # state = sim.dense_state()
-        # save_data[seed][0] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
         save_data[seed]['coverage'] = []
 
         # main loop
@@ -132,10 +102,6 @@ if __name__ == '__main__':
 
             if communication:
                 # print('communication')
-                # merge all agent beliefs
-                # merged_belief = merge_beliefs([agent for agent in team.values()])
-                # for agent in team.values():
-                #     agent.belief = merged_belief
 
                 # predict future belief of team belief (open-loop)
                 predicted_belief = copy(team_belief)
@@ -154,17 +120,13 @@ if __name__ == '__main__':
                                                       np.ones(settings.image_size),
                                                       mode='constant', cval=0)
 
-                        distances = np.linalg.norm(node_locations - agent.position, ord=np.inf, axis=2)
+                        distances = np.linalg.norm(settings.cell_locations - agent.position, ord=np.inf, axis=2)
                         locations_r, locations_c = np.where(distances == settings.meeting_interval)
                         locations = list(zip(locations_r, locations_c))
 
                         if len(locations) == 1:
                             chosen_location = locations[0]
                         else:
-                            # np.random.shuffle(locations)
-                            # options = [(weights[r, c], (r, c)) for (r, c) in locations]
-                            # chosen_location = max(options, key=itemgetter(0))[1]
-
                             options = []
                             highest_weight = -1
                             for end in locations:
@@ -174,7 +136,7 @@ if __name__ == '__main__':
                                     highest_weight = v
                                 options.append((v, end))
 
-                            options = [end[1] for end in options if end[0] >= 0.9*highest_weight]
+                            options = [end[1] for end in options if end[0] >= settings.gamma*highest_weight]
                             np.random.shuffle(options)
                             chosen_location = options[0]
 
@@ -195,15 +157,11 @@ if __name__ == '__main__':
                         agent_path = graph_search(agent.position, agent.first, agent.budget, weights, settings)[0]
 
                         for location in agent_path:
-                            # conditional_entropy = update_information(conditional_entropy, location, settings)
                             conditional_entropy[location[0], location[1]] = 0
 
                         agent.plan = agent_path[1:]
 
                 for agent in team.values():
-                    # print('agent {0:d}: {1} -> {2} -> ... -> {3}'.format(agent.label, agent.position,
-                    #                                                      agent.plan[0], agent.first))
-
                     agent.position = agent.plan[0]
                     agent.plan.pop(0)
 
@@ -220,13 +178,6 @@ if __name__ == '__main__':
                 if t > 1 and (t-1)%settings.process_update == 0:
                     advance = True
                 team_belief = update_belief(sim.group, team_belief, advance, team_observation, settings, control=None)
-
-                # exact belief at each time step
-                # team_belief = dict()
-                # for key in sim.group.keys():
-                #     element = sim.group[key]
-                #     team_belief[key] = np.zeros(len(element.state_space))
-                #     team_belief[key][element.state] = 1
 
             else:
                 # print('no communication')
@@ -245,40 +196,20 @@ if __name__ == '__main__':
                                                   np.ones(settings.image_size),
                                                   mode='constant', cval=0)
 
-                    # # find reachable locations, and compute the highest weight path to each
-                    # distances = np.linalg.norm(node_locations - agent.position, ord=np.inf, axis=2)
-                    # locations_r, locations_c = np.where(distances == settings.meeting_interval)
-                    # locations = list(zip(locations_r, locations_c))
-                    #
-                    # options = []
-                    # highest_weight = -1
-                    # for end in locations:
-                    #     _, v = graph_search(agent.position, end, settings.meeting_interval, weights, settings)
-                    #
-                    #     if v > highest_weight:
-                    #         highest_weight = v
-                    #     options.append((v, end))
-                    #
-                    # # pick a location with highest total information gain
-                    # options = [end[1] for end in options if end[0] == highest_weight]
-                    # meeting = options[0]
-
                     # find reachable locations, and choose one with high entropy
-                    distances = np.linalg.norm(node_locations - agent.position, ord=np.inf, axis=2)
+                    distances = np.linalg.norm(settings.cell_locations - agent.position, ord=np.inf, axis=2)
                     locations_r, locations_c = np.where(distances == settings.meeting_interval)
                     locations = list(zip(locations_r, locations_c))
 
                     if len(locations) == 1:
                         chosen_location = locations[0]
                     else:
-                        # np.random.shuffle(locations)
                         options = [(weights[r, c], (r, c)) for (r, c) in locations]
                         chosen_location = max(options, key=itemgetter(0))[1]
 
                     # plan a path to location and update position
                     agent.first = chosen_location
                     agent.plan = create_solo_plan(agent, sim.group, settings)
-                    # print('agent {0:d}: {1} -> {2} -> ... -> {3}'.format(agent.label, agent.position, agent.plan[0], agent.first))
                     agent.position = agent.plan[0]
 
                     # update agent belief
@@ -293,13 +224,9 @@ if __name__ == '__main__':
                 sim.update()
 
             state = sim.dense_state()
-            current_coverage = compute_coverage(team, sim, state, settings)
-            # print('time {0:d} coverage = {1:0.4f}'.format(t, current_coverage))
+            current_coverage = compute_coverage(team, sim, settings)
             save_data[seed]['coverage'].append(current_coverage)
-            # compute_frequency(team, state, frequency)
-            # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
-        # save_data[seed][total_iterations] = frequency
         print('[Baseline] finished simulation {0:d} (coverage = {1:0.4f})'.format(sim_count+1,
                                                                                   np.mean(save_data[seed]['coverage'])))
 
