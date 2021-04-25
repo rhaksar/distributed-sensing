@@ -39,11 +39,6 @@ if __name__ == '__main__':
     # initialize simulator
     sim = LatticeForest(settings.dimension)
 
-    node_row = np.linspace(0, settings.dimension - 1, settings.dimension)
-    node_col = np.linspace(0, settings.dimension - 1, settings.dimension)
-    node_row, node_col = np.meshgrid(node_row, node_col)
-    node_locations = np.stack([node_row.T, node_col.T], axis=2)
-
     # create schedule
     S = []
     for i in range(1, np.floor(settings.team_size/2).astype(int)+1):
@@ -59,15 +54,6 @@ if __name__ == '__main__':
         # exact belief
         initial_belief[key] = np.zeros(len(element.state_space))
         initial_belief[key][element.state] = 1
-
-        # exact for healthy, uniform otherwise
-        # if element.state == 0:
-        #     initial_belief[key] = np.array([1.0, 0.0, 0.0])
-        # else:
-        #     initial_belief[key] = (1/3)*np.ones(len(element.state_space))
-
-        # uniform uncertainty
-        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
 
     # initialize data structure for saving information
     save_data = dict()
@@ -92,31 +78,28 @@ if __name__ == '__main__':
         # deploy remaining agents that do not have a meeting in S
         offset = len(S)+1
         for agent in team.values():
-            if agent.position is None:
+            if not agent.position:
                 idx = np.unravel_index(offset, (square_size, square_size), order='C')
                 agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
                 offset += 1
 
         # set initial meeting locations and time budgets
-        meetings = schedule_initial_meetings(team, Sprime, sim.group, node_locations, settings)
+        meetings = schedule_initial_meetings(team, Sprime, sim.group, settings)
         for label in meetings.keys():
             team[label].last = meetings[label]
             team[label].budget = settings.meeting_interval
 
         # make sure all agents have valid first and last meeting locations, as well as correct time budgets
         for agent in team.values():
-            if agent.first is None:
+            if not agent.first:
                 agent.first = agent.last
                 agent.budget = settings.meeting_interval
-            if agent.last is None:
+            if not agent.last:
                 agent.last = agent.first
                 agent.budget = 2*settings.meeting_interval
 
         next_meetings = 0
 
-        # frequency = np.zeros((settings.dimension, settings.dimension))
-        # state = sim.dense_state()
-        # save_data[seed][0] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
         save_data[seed]['coverage'] = []
 
         # main loop
@@ -132,10 +115,8 @@ if __name__ == '__main__':
                     for agent in sub_team:
                         agent.belief = copy(merged_belief)
 
-                    meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
-                    # print('meeting', s, 'chose location', meeting)
+                    meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, settings)
                     for agent in sub_team:
-                        # if agent.first == agent.last:
                         if agent.label in [1, settings.team_size]:
                             agent.first = meeting
                             agent.last = meeting
@@ -157,8 +138,6 @@ if __name__ == '__main__':
             # update agent position
             for agent in team.values():
                 agent.plan = create_solo_plan(agent, sim.group, settings)
-                # print('agent {0:d}: {1} -> {2} -> ... -> {3}'.format(agent.label, agent.position,
-                #                                                      agent.plan[0], agent.first))
 
                 agent.position = agent.plan[0]
                 for other_label in agent.other_plans.keys():
@@ -180,13 +159,9 @@ if __name__ == '__main__':
                 sim.update()
 
             state = sim.dense_state()
-            current_coverage = compute_coverage(team, sim, state, settings)
-            # print('time {0:d} coverage = {1:0.4f}'.format(t, current_coverage))
+            current_coverage = compute_coverage(team, sim, settings)
             save_data[seed]['coverage'].append(current_coverage)
-            # compute_frequency(team, state, frequency)
-            # save_data[seed][t] = [compute_accuracy(team[label].belief, state, settings) for label in team.keys()]
 
-        # save_data[seed][total_iterations] = frequency
         print('[Benchmark] finished simulation {0:d} (coverage = {1:0.4f})'.format(sim_count+1,
                                                                                    np.mean(save_data[seed]['coverage'])))
 
@@ -202,4 +177,4 @@ if __name__ == '__main__':
     toc = time.clock()
     dt = toc - tic
     print('[Benchmark] completed at %s' % (time.strftime('%d-%b-%Y %H:%M')))
-    print('[Benchmark] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt / 60, dt / 3600))
+    print('[Benchmark] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt/60, dt/3600))
