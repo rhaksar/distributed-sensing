@@ -1,20 +1,16 @@
-from copy import copy, deepcopy
+from copy import copy
 import numpy as np
-import os
 import pickle
-import sys
 import time
 
-from filter import merge_beliefs, update_belief, get_image
-from metrics import compute_accuracy, compute_coverage, compute_frequency
-from scheduling import schedule_initial_meetings, schedule_next_meeting, \
+from framework.filter import merge_beliefs, update_belief, get_image
+from framework.metrics import compute_coverage
+from framework.scheduling import schedule_initial_meetings, schedule_next_meeting, \
     create_joint_plan, create_solo_plan, compute_entropy
-from uav import UAV
-from utilities import Config
+from framework.uav import UAV
+from framework.utilities import Config
 
-base_path = os.path.dirname(os.getcwd())
-sys.path.insert(0, base_path + '/simulators')
-from fires.LatticeForest import LatticeForest
+from simulators.fires.LatticeForest import LatticeForest
 
 
 if __name__ == '__main__':
@@ -30,45 +26,19 @@ if __name__ == '__main__':
     # initialize simulator
     sim = LatticeForest(settings.dimension, rng=seed)
 
-    # add fires to initial condition
+    # optional - add fires to initial condition
     # initial_fire = sim.fires
     # initial_fire.extend([(6, 6), (6, 5), (6, 7), (7, 6), (5, 6), (5, 7), (5, 8), (4, 7)])
     # sim.initial_fire = initial_fire
     # sim.reset()
 
-    node_row = np.linspace(0, settings.dimension - 1, settings.dimension)
-    node_col = np.linspace(0, settings.dimension - 1, settings.dimension)
-    node_row, node_col = np.meshgrid(node_row, node_col)
-    node_locations = np.stack([node_row.T, node_col.T], axis=2)
-
     # initialize agents
     initial_belief = dict()
-    # radius = 7
-    # center = (settings.dimension-1)//2
     for key in sim.group.keys():
         element = sim.group[key]
         # exact belief
         initial_belief[key] = np.zeros(len(element.state_space))
         initial_belief[key][element.state] = 1
-
-        # exact for healthy, uniform otherwise
-        # if element.state == 0:
-        #     initial_belief[key] = np.array([1.0, 0.0, 0.0])
-        # else:
-        #     initial_belief[key] = (1/len(element.state_space))*np.ones(len(element.state_space))
-
-        # uniform belief
-        # initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
-
-        # uniform belief around center, exact belief else where
-        # if np.linalg.norm(np.asarray(key) - np.array([center, center]), ord=np.inf) <= radius:
-        #     initial_belief[key] = np.ones(len(element.state_space))/len(element.state_space)
-        # else:
-        #     initial_belief[key] = np.zeros(len(element.state_space))
-        #     initial_belief[key][element.state] = 1
-
-        # initial_belief[key] = 0.10*np.ones(len(element.state_space))
-        # initial_belief[key][element.state] += 0.70
 
     team = {i+1: UAV(label=i+1, belief=copy(initial_belief), image_size=settings.image_size)
             for i in range(settings.team_size)}
@@ -93,33 +63,29 @@ if __name__ == '__main__':
     # deploy remaining agents that do not have a meeting in S
     offset = len(S)+1
     for agent in team.values():
-        if agent.position is None:
+        if not agent.position:
             idx = np.unravel_index(offset, (square_size, square_size), order='C')
             agent.position = (settings.corner[0]-idx[0], settings.corner[1]+idx[1])
             offset += 1
 
     # set initial meeting locations and time budgets
-    meetings = schedule_initial_meetings(team, Sprime, sim.group, node_locations, settings)
+    meetings = schedule_initial_meetings(team, Sprime, sim.group, settings)
     for label in meetings.keys():
         team[label].last = meetings[label]
         team[label].budget = settings.meeting_interval
 
     # make sure all agents have valid first and last meeting locations, as well as correct time budgets
     for agent in team.values():
-        if agent.first is None:
+        if not agent.first:
             agent.first = agent.last
             agent.budget = settings.meeting_interval
-        if agent.last is None:
+        if not agent.last:
             agent.last = agent.first
             agent.budget = 2*settings.meeting_interval
 
-    # should this still be done here?
-    # for s in Sprime:
-    #     sub_team = [team[k] for k in s]
-    #     create_joint_plan(sub_team, sim.group, settings)
-
     next_meetings = 0
 
+    # date to write to file
     save_data = dict()
     save_data['schedule'] = [S, Sprime]
     save_data['settings'] = settings
@@ -127,15 +93,10 @@ if __name__ == '__main__':
     state = sim.dense_state()
     save_data['time_series'][0] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
                                                team.keys()},
-                                   'accuracy': {label: compute_accuracy(team[label].belief, state, settings)
-                                                for label in team.keys()},
                                    'position': {label: copy(team[label].position) for label in team.keys()},
                                    'plan': {label: copy(team[label].plan) for label in team.keys()},
                                    'process_state': state}
-    frequency_matrix = np.zeros((settings.dimension, settings.dimension))
     coverage_metric_series = []
-    # save_data['time_series'][0] = {'team': deepcopy(team),
-    #                                'process_state': state}
 
     # main loop
     for t in range(1, total_iterations):
@@ -146,19 +107,15 @@ if __name__ == '__main__':
         if (t-1) % settings.meeting_interval == 0:
 
             for s in [S, Sprime][next_meetings]:
-                # print('meeting', s)
                 sub_team = [team[k] for k in s]
                 assert sub_team[0].position == sub_team[1].position
 
                 merged_belief = merge_beliefs(sub_team)
-                # print(compute_accuracy(merged_belief, sim.dense_state(), settings))
                 for agent in sub_team:
                     agent.belief = copy(merged_belief)
 
-                meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, node_locations, settings)
-                # print('chose location', meeting)
+                meeting = schedule_next_meeting(sub_team, merged_belief, sim.group, settings)
                 for agent in sub_team:
-                    # if agent.first == agent.last:
                     if agent.label in [1, settings.team_size]:
                         agent.first = meeting
                         agent.last = meeting
@@ -179,7 +136,6 @@ if __name__ == '__main__':
 
         # update agent position
         for agent in team.values():
-            # print(agent.label, agent.position)
             agent.plan = create_solo_plan(agent, sim.group, settings)
             agent.position = agent.plan[0]
             for other_label in agent.other_plans.keys():
@@ -200,39 +156,23 @@ if __name__ == '__main__':
         if t > 1 and (t-1) % settings.process_update == 0:
             sim.update()
 
-        # save_data['time_series'][t] = {'team': deepcopy(team),
-        #                                'process_state': sim.dense_state()}
-        state = sim.dense_state()
-        compute_frequency(team, state, frequency_matrix)
-        coverage_metric_series.append(compute_coverage(team, sim, state, settings))
+        # save data
+        coverage_metric_series.append(compute_coverage(team, sim, settings))
         save_data['time_series'][t] = {'entropy': {label: compute_entropy(team[label].belief, settings) for label in
                                                    team.keys()},
-                                       'accuracy': {label: compute_accuracy(team[label].belief, state, settings)
-                                                    for label in team.keys()},
                                        'position': {label: copy(team[label].position) for label in team.keys()},
                                        'plan': {label: copy(team[label].plan) for label in team.keys()},
                                        'process_state': state}
-        # save_data['time_series'][t] = {'team': deepcopy(team),
-        #                                'process_state': state}
-
-        # if sim.early_end:
-        #     print('process cannot spread')
-        #     break
-        #
-        # if sim.end:
-        #     print('process has terminated')
-        #     break
 
     # write data to file
-    filename = 'sim_images/meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
+    filename = 'Meetings/meetings-' + time.strftime('%d-%b-%Y-%H%M') + '.pkl'
     with open(filename, 'wb') as handle:
         pickle.dump(save_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    save_data['frequency'] = frequency_matrix
     save_data['coverage'] = coverage_metric_series
     # print('coverage metric =',save_data['coverage'])
 
     toc = time.clock()
     dt = toc - tic
     print('[Meetings] completed at %s' % (time.strftime('%d-%b-%Y %H:%M')))
-    print('[Meetings] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt / 60, dt / 3600))
+    print('[Meetings] %0.2fs = %0.2fm = %0.2fh elapsed' % (dt, dt/60, dt/3600))
