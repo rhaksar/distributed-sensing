@@ -7,7 +7,7 @@ import scipy.stats as ss
 from framework.filter import update_belief, measure_model
 
 
-def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, config):
+def schedule_initial_meetings(team, Sprime, simulation_group, config):
     """
     Once the UAVs are deployed, each UAV needs a future meeting location to plan for. This function assigns locations
     for meetings according to the schedule describing by Sprime, such that the location is reachable by each UAV
@@ -19,8 +19,6 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
     and 2 will meet in the future.
     :param simulation_group: the group of simulation elements from the LatticeForest simulator, which is a dictionary of
     {Tree position: Tree object} key value pairs.
-    :param cell_locations: a 2D numpy array which describes the location of trees which encodes the physical dimensions
-    of the forest.
     :param config: a Config class object which contains the meeting and planning parameters.
 
     :return: a dictionary of {UAV label: meeting location} key value pairs.
@@ -36,7 +34,7 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
         # compute a weight for each location in the forest
         weights = sn.filters.convolve(conditional_entropy, np.ones(config.image_size), mode='constant', cval=0)
 
-        distances = np.maximum.reduce([np.linalg.norm(cell_locations-team[k].position, ord=np.inf, axis=2)
+        distances = np.maximum.reduce([np.linalg.norm(config.cell_locations-team[k].position, ord=np.inf, axis=2)
                                        for k in s])
         locations_r, locations_c = np.where(distances == config.meeting_interval)
         locations = list(zip(locations_r, locations_c))
@@ -58,7 +56,7 @@ def schedule_initial_meetings(team, Sprime, simulation_group, cell_locations, co
     return meetings
 
 
-def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locations, config):
+def schedule_next_meeting(sub_team, merged_belief, simulation_group, config):
     """
     For a sub-group of UAVs, find the next meeting location.
 
@@ -67,8 +65,6 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
     {Tree position: list of probabilities for each state value} key value pairs.
     :param simulation_group: the group of simulation elements from the LatticeForest simulator, which is a dictionary of
     {Tree position: Tree object} key value pairs.
-    :param cell_locations: a 2D numpy array which describes the location of trees which encodes the physical dimensions
-    of the forest.
     :param config: a Config class object which contains the meeting and planning parameters.
 
     :return: a tuple indicating the chosen meeting location in the forest.
@@ -99,10 +95,10 @@ def schedule_next_meeting(sub_team, merged_belief, simulation_group, cell_locati
     # the first and last UAV in the team only ever have one meeting, whereas other UAVs have two meetings
     # find the reachable locations for the UAVs in the sub-group based on their meeting locations
     if all([agent.first == agent.last for agent in sub_team]):
-        distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
+        distances = np.maximum.reduce([np.linalg.norm(config.cell_locations - agent.last, ord=np.inf, axis=2)
                                        for agent in sub_team])
     else:
-        distances = np.maximum.reduce([np.linalg.norm(cell_locations - agent.last, ord=np.inf, axis=2)
+        distances = np.maximum.reduce([np.linalg.norm(config.cell_locations - agent.last, ord=np.inf, axis=2)
                                        for agent in sub_team if agent.label not in [1, config.team_size]])
     locations_r, locations_c = np.where(distances == config.meeting_interval)
     locations = list(zip(locations_r, locations_c))
