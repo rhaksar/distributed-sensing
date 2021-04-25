@@ -31,11 +31,15 @@ class Config(object):
         self.seed = None  # random seed
         self.dimension = 25  # size of one side of the square forest
 
+        # create a 2D numpy array which corresponds to the physical location of trees
+        cell_row = np.linspace(0, self.dimension-1, self.dimension)
+        cell_col = np.linspace(0, self.dimension-1, self.dimension)
+        cell_row, cell_col = np.meshgrid(cell_row, cell_col)
+        self.cell_locations = np.stack([cell_row.T, cell_col.T], axis=2)
+
         self.process_update = process_update  # how often forest fire dynamics update
 
-        self.cell_side_length = 0.5  # scaling from (row, col) to (x, y)
-        # starting location for deploying UAVs in the forest
-        self.corner = xy_to_rc(self.dimension, np.array([1.5, 1.5]) - self.cell_side_length)
+        self.corner = xy_to_rc(self.dimension, np.array([1., 1.]))
 
         self.team_size = team_size
         self.image_size = (3, 3)
