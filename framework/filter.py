@@ -172,29 +172,7 @@ def update_belief(simulation_group, prior, advance, observation, config, control
                 elif type(observation[key]) == list:
                     element_posterior[x_t] *= np.prod([measure_model(element, x_t, obs, config)
                                                        for obs in observation[key]])
-            # elif advance:
-            #     weight = config.regularization_weight
-            #     mean = np.mean(element_posterior)
-            #     element_posterior = [v - weight*np.sign(v-mean)*np.abs(v-mean) for v in element_posterior]
 
         posterior[key] = element_posterior/np.sum(element_posterior)
 
     return posterior
-
-
-# class ApproxFilter(object):
-#
-#     def __init__(self, belief):
-#         self.belief = belief
-#
-#     def filter(self, simulation, element_update):
-#         tic = time.clock()
-#         posterior = copy(self.belief)
-#
-#         for key in simulation.group.keys():
-#             element = simulation.group[key]
-#             posterior[key] = element_update(key, element, self.belief)
-#
-#         toc = time.clock()
-#         self.belief = posterior
-#         return posterior, toc-tic
